@@ -31,8 +31,7 @@ from tf_agents.environments.tf_py_environment import TFPyEnvironment
 logger = logging.getLogger(__name__)
 
 PETRIS_LOG_FILE = "petris.log"
-PETRIS_LOG_DIR = "logs"
-PETRIS_LOG_PATH = paths.BASE_DIR / PETRIS_LOG_DIR / PETRIS_LOG_FILE
+PETRIS_LOG_PATH = paths.LOG_PATH / PETRIS_LOG_FILE
 
 
 def main(speed: int, agent: Optional[str] = None, debug: bool = False, num_episodes: int = 5) -> int:
