@@ -3,21 +3,21 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-from typing import List
+from typing import List, Tuple
 
 from tf_agents.agents.dqn import dqn_agent
-# from tf_agents.drivers import py_driver
-# from tf_agents.environments import suite_gym
-# from tf_agents.environments import tf_py_environment
-# from tf_agents.eval import metric_utils
-# from tf_agents.metrics import tf_metrics
+from tf_agents.drivers import py_driver
+from tf_agents.environments import suite_gym
+from tf_agents.environments import tf_py_environment
+from tf_agents.eval import metric_utils
+from tf_agents.metrics import tf_metrics
 from tf_agents.networks import sequential
-# from tf_agents.policies import py_tf_eager_policy
-# from tf_agents.policies import random_tf_policy
-# from tf_agents.replay_buffers import reverb_replay_buffer
-# from tf_agents.replay_buffers import reverb_utils
-# from tf_agents.trajectories import trajectory
-# from tf_agents.specs import tensor_spec
+from tf_agents.policies import py_tf_eager_policy
+from tf_agents.policies import random_tf_policy
+from tf_agents.replay_buffers import reverb_replay_buffer
+from tf_agents.replay_buffers import reverb_utils
+from tf_agents.trajectories import trajectory
+from tf_agents.specs import tensor_spec
 from tf_agents.utils import common
 
 
@@ -32,8 +32,28 @@ from tf_agents.environments.tf_py_environment import TFPyEnvironment
 
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
+from src.petris_environment.petris_environment import PetrisEnvironment
 
 logger = logging.getLogger(__name__) 
+
+
+def create_train_eval_env() -> Tuple[TFPyEnvironment, TFPyEnvironment]:
+    """
+    Creates a training and evaluation petris environment for the agent to use.
+
+    Returns:
+        Tuple: trainig_env, eval_env 
+    """
+    return TFPyEnvironment(PetrisEnvironment()), TFPyEnvironment(PetrisEnvironment())
+
+
+# TODO: Set up Replay buffer
+# TODO: Set up PyDrive for Data Collection
+# TODO: Train the Agent
+# TODO: Evaluate Average return and see if it is performing well during training 
+
+def train_dqn():
+    pass
 
 
 def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
