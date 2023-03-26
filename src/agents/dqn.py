@@ -36,9 +36,7 @@ from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
 
 logger = logging.getLogger(__name__)
-
-# TODO: Set up PyDrive for Data Collection
-# TODO: Train the Agent
+ 
 # TODO: Evaluate Average return and see if it is performing well during training 
 
 
