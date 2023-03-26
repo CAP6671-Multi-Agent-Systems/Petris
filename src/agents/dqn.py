@@ -5,6 +5,7 @@ from __future__ import absolute_import, division, print_function
 import logging
 from typing import List, Tuple
 
+import reverb
 from tf_agents.agents.dqn import dqn_agent
 from tf_agents.drivers import py_driver
 from tf_agents.environments import suite_gym
@@ -34,7 +35,11 @@ from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
+# TODO: Set up PyDrive for Data Collection
+# TODO: Train the Agent
+# TODO: Evaluate Average return and see if it is performing well during training 
 
 
 def create_train_eval_env() -> Tuple[TFPyEnvironment, TFPyEnvironment]:
@@ -44,19 +49,69 @@ def create_train_eval_env() -> Tuple[TFPyEnvironment, TFPyEnvironment]:
     Returns:
         Tuple: trainig_env, eval_env 
     """
+
+    logger.info("Creating Training and Evaluation Environment for Petris Agent")
+
     return TFPyEnvironment(PetrisEnvironment()), TFPyEnvironment(PetrisEnvironment())
 
 
-# TODO: Set up Replay buffer
-# TODO: Set up PyDrive for Data Collection
-# TODO: Train the Agent
-# TODO: Evaluate Average return and see if it is performing well during training 
+def create_replay_buffer(agent: dqn_agent.DqnAgent, replay_buffer_length: int = 100000):
+    table_name = "uniform_table"
 
-def train_dqn():
-    pass
+    replay_buffer_signature = tensor_spec.from_spec(
+        agent.collect_data_spec
+    )
+    replay_buffer_signature = tensor_spec.add_outer_dim(
+        replay_buffer_signature
+    )
+
+    table = reverb.Table(
+        table_name,
+        max_size=replay_buffer_length,
+        sampler=reverb.selectors.Uniform(),
+        remover=reverb.selectors.Fifo(),
+        rate_limiter=reverb.rate_limiters.MinSize(1),
+        signature=replay_buffer_signature
+    )
+
+    reverb_server = reverb.Server([table])
+
+    replay_buffer = reverb_replay_buffer.ReverbReplayBuffer(
+        agent.collect_data_spec,
+        table_name=table_name,
+        sequence_length=2,
+        local_server=reverb_server
+    )
+
+    rb_observer = reverb_utils.ReverbAddTrajectoryObserver(
+        replay_buffer.py_client,
+        table_name=table_name,
+        sequence_length=2
+    )
+
+    return replay_buffer, rb_observer
+
+
+def collect_episode(env: PetrisEnvironment, agent: dqn_agent, rb_observer: reverb_utils.ReverbAddTrajectoryObserver, steps: int = 1) -> None:
+    driver = py_driver.PyDriver(
+        env,
+        py_tf_eager_policy.PyTFEagerPolicy(agent.collect_policy, use_tf_function=True),
+        [rb_observer],
+        max_steps=steps
+    )
+    time_step  = env.reset()
+    driver.run(time_step)
 
 
 def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
+    """_summary_
+
+    Args:
+        env (TFPyEnvironment): _description_
+
+    Returns:
+        dqn_agent.DqnAgent: _description_
+    """
     q_net = sequential.Sequential([
         keras.layers.Dense(
             100, 
@@ -86,6 +141,42 @@ def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
     q_net.summary()
     
     return agent
+
+
+def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, eval_interval: int = 1000, episodes: int = 2) -> None:
+    """Creates and Trains a DQN agent."""
+
+    petris_environment = PetrisEnvironment()
+    train_env = TFPyEnvironment(environment=petris_environment)
+
+    # Set up agent 
+    dqn_agent = create_dqn(env=train_env)
+    dqn_agent.train = common.function(dqn_agent.train)
+    dqn_agent.train_step_counter.assign(0)
+
+    # Replay buffer
+    replay_buffer, rb_observer = create_replay_buffer(agent=dqn_agent)
+
+    time_step = petris_environment.reset()
+
+    logger.info("Running for %s epochs", epochs)
+
+    for epoch in range(epochs):
+        logger.info("Running Epoch: %s", epoch)
+
+        collect_episode(agent=dqn_agent, env=petris_environment, rb_observer=rb_observer, steps=episodes)
+        iterator = iter(replay_buffer.as_dataset(sample_batch_size=batch_size))
+        trajectories, _ = next(iterator)
+
+        train_loss = dqn_agent.train(experience=trajectories).loss
+
+        step = dqn_agent.train_step_counter.numpy()
+        logger.info("Step = %s: loss = %s", step, train_loss)
+
+        if step % eval_interval == 0:
+            # TODO: Compute average return here
+            pass
+    logger.error("HERE")
 
 
 # Function to test the environment using a fixed policy 
