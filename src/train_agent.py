@@ -2,12 +2,19 @@
 Another main script for training the avaialable agents.
 """
 
+import os
 import sys
 import argparse
 import logging
+from pathlib import Path
+
+# NOTE: Going to set the paths in here before importing packages. 
+# NOTE: This is important for importing packages.
+sys.path.append(str(Path().parent))
 
 from src import paths
 from src.log.log import initialize_logger
+from src.agents.dqn import train_dqn
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +40,12 @@ def main(agent: str, debug: bool = False) -> int:
     try:
         initialize_logger(log_path=TRAIN_LOG_PATH, debug=debug)
 
-        logger.info("Beginning Training")
+        logger.info("Beginning Training Agent: %s", agent.upper())
 
+        if agent.lower() == "dqn":
+            train_dqn(epochs=250)
     except Exception as ex:
+        exit_code = 1
         logger.exception(ex)
     finally:
         logger.info("End of Training: %s", exit_code)
@@ -53,4 +63,4 @@ if __name__ == "__main__":
 
     args, _ = parser.parse_known_args()
 
-    sys.exit(main(agent=arg.agent, debug=args.debug))
+    sys.exit(main(agent=args.agent, debug=args.debug))
