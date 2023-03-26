@@ -56,13 +56,11 @@ class PetrisEnvironment(PyEnvironment):
         # State will represent the current state of the tetris map
         # Orignal Shape: (20, 10)
         # New shape: (200, )
-        squeezed_state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
-        self._state: np.ndarray = squeezed_state
+        self._state: np.ndarray = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
         
         # Flag for a game ends. Normally happens when the agent loses.
         self._episode_ended: bool = False
 
-        # 
         self._current_num_lines = State.full_line_no
 
     def action_spec(self) -> BoundedArraySpec:
@@ -107,7 +105,7 @@ class PetrisEnvironment(PyEnvironment):
         self._current_num_lines = State.full_line_no
         self._game_scene = GameScene()
         Scenes.active_scene = self._game_scene
-        self._state = np.array(self._game_scene.tetris_map).flatten().tolist()
+        self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
         self._episode_ended = False
         
         return ts.restart(np.array([self._state], dtype=np.int32))
@@ -137,11 +135,9 @@ class PetrisEnvironment(PyEnvironment):
             if State.full_line_no != self._current_num_lines:
                 reward = State.full_line_no * 100
                 self._current_num_lines = State.full_line_no
+                logger.info("Rewarded: %s", reward)
             else:
                 reward =  0
-
-            if reward > 0:
-                logger.info("Rewarded: %s", reward)
 
             # NOTE: We are wrapping it in [] to maintain the (1, 200) 
             # NOTE: shape that is specified in the observation spec.
