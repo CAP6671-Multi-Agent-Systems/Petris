@@ -90,17 +90,6 @@ def create_replay_buffer(agent: dqn_agent.DqnAgent, replay_buffer_length: int = 
     return replay_buffer, rb_observer
 
 
-def collect_episode(env: PetrisEnvironment, agent: dqn_agent, rb_observer: reverb_utils.ReverbAddTrajectoryObserver, steps: int = 1) -> None:
-    driver = py_driver.PyDriver(
-        env,
-        py_tf_eager_policy.PyTFEagerPolicy(agent.collect_policy, use_tf_function=True),
-        [rb_observer],
-        max_steps=steps
-    )
-    time_step  = env.reset()
-    driver.run(time_step)
-
-
 def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
     """_summary_
 
@@ -155,6 +144,23 @@ def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, ev
     # Replay buffer
     replay_buffer, rb_observer = create_replay_buffer(agent=dqn_agent)
 
+    collect_driver = py_driver.PyDriver(
+        petris_environment,
+        py_tf_eager_policy.PyTFEagerPolicy(
+            dqn_agent.collect_policy, use_tf_function=True
+        ),
+        [rb_observer],
+        max_steps=1
+    )
+
+    dataset = replay_buffer.as_dataset(
+        num_parallel_calls=3,
+        sample_batch_size=batch_size,
+        num_steps=2
+    ).prefetch(3)
+
+    iterator = iter(dataset)
+
     time_step = petris_environment.reset()
 
     logger.info("Running for %s epochs", epochs)
@@ -162,11 +168,14 @@ def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, ev
     for epoch in range(epochs):
         logger.info("Running Epoch: %s", epoch)
 
-        collect_episode(agent=dqn_agent, env=petris_environment, rb_observer=rb_observer, steps=episodes)
-        iterator = iter(replay_buffer.as_dataset(sample_batch_size=batch_size))
-        trajectories, _ = next(iterator)
+        logger.info("Collecting Episode Information")
+        time_step, _ = collect_driver.run(time_step)
 
-        train_loss = dqn_agent.train(experience=trajectories).loss
+        logger.info("Gathering and assessing experience")
+        experience, unused_info = next(iterator)
+
+        logger.info("Getting Training Loss")
+        train_loss = dqn_agent.train(experience=experience).loss
 
         step = dqn_agent.train_step_counter.numpy()
         logger.info("Step = %s: loss = %s", step, train_loss)
@@ -174,8 +183,8 @@ def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, ev
         if step % eval_interval == 0:
             # TODO: Compute average return here
             pass
-    logger.error("HERE")
-
+    
+    logger.info("Finishing Training...")
 
 # Function to test the environment using a fixed policy 
 def fixed_policy_test(env: TFPyEnvironment):
