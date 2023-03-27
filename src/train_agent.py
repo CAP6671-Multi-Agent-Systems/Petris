@@ -43,7 +43,7 @@ def main(agent: str, debug: bool = False) -> int:
         logger.info("Beginning Training Agent: %s", agent.upper())
 
         if agent.lower() == "dqn":
-            train_dqn(epochs=250)
+            train_dqn(epochs=1, batch_size=5)
     except Exception as ex:
         exit_code = 1
         logger.exception(ex)
