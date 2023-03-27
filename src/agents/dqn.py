@@ -130,7 +130,7 @@ def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
     return agent
 
 
-def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, eval_interval: int = 1000, episodes: int = 2) -> None:
+def train_dqn(episodes: int = 20, batch_size: int = 1, log_interval: int = 200, eval_interval: int = 1000) -> None:
     """Creates and Trains a DQN agent."""
 
     petris_environment = PetrisEnvironment()
@@ -163,10 +163,10 @@ def train_dqn(epochs: int = 20, batch_size: int = 1, log_interval: int = 200, ev
 
     time_step = petris_environment.reset()
 
-    logger.info("Running for %s epochs", epochs)
+    logger.info("Running for %s episodes", episodes)
 
-    for epoch in range(epochs):
-        logger.info("Running Epoch: %s", epoch)
+    for episode in range(episodes):
+        logger.info("Running Episode: %s", episode)
 
         logger.info("Collecting Episode Information")
         time_step, _ = collect_driver.run(time_step)
