@@ -10,6 +10,8 @@ from tf_agents.agents.dqn import dqn_agent
 from tf_agents.drivers import py_driver
 from tf_agents.environments import suite_gym
 from tf_agents.environments import tf_py_environment
+from tf_agents.replay_buffers.tf_uniform_replay_buffer import TFUniformReplayBuffer
+from tf_agents.replay_buffers import ReverbAddEpisodeObserver
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.networks import sequential
@@ -20,6 +22,8 @@ from tf_agents.replay_buffers import reverb_utils
 from tf_agents.trajectories import trajectory
 from tf_agents.specs import tensor_spec
 from tf_agents.utils import common
+from tf_agents.utils.common import function
+from tf_agents.drivers.dynamic_step_driver import DynamicStepDriver
 
 
 import pygame
@@ -81,10 +85,10 @@ def create_replay_buffer(agent: dqn_agent.DqnAgent, replay_buffer_length: int = 
         local_server=reverb_server
     )
 
-    rb_observer = reverb_utils.ReverbAddTrajectoryObserver(
+    rb_observer = ReverbAddEpisodeObserver(
         replay_buffer.py_client,
         table_name=table_name,
-        sequence_length=2
+        max_sequence_length=2
     )
 
     return replay_buffer, rb_observer
@@ -137,31 +141,34 @@ def train_dqn(episodes: int = 20, batch_size: int = 1, log_interval: int = 200, 
     train_env = TFPyEnvironment(environment=petris_environment)
 
     # Set up agent 
-    dqn_agent = create_dqn(env=train_env)
-    dqn_agent.train = common.function(dqn_agent.train)
-    dqn_agent.train_step_counter.assign(0)
+    agent = create_dqn(env=train_env)
+    agent.train = function(agent.train)
+    agent.train_step_counter.assign(0)
 
-    # Replay buffer
-    replay_buffer, rb_observer = create_replay_buffer(agent=dqn_agent)
-
-    collect_driver = py_driver.PyDriver(
-        petris_environment,
-        py_tf_eager_policy.PyTFEagerPolicy(
-            dqn_agent.collect_policy, use_tf_function=True
-        ),
-        [rb_observer],
-        max_steps=1
+    replay_buffer = TFUniformReplayBuffer(
+        data_spec=agent.collect_data_spec,
+        batch_size=train_env.batch_size,
+        max_length=100000
     )
-
+    
     dataset = replay_buffer.as_dataset(
-        num_parallel_calls=3,
-        sample_batch_size=batch_size,
-        num_steps=2
-    ).prefetch(3)
+        sample_batch_size=1,
+        num_steps=5,
+        num_parallel_calls=4
+    ).prefetch(4)
 
     iterator = iter(dataset)
-
+    
+    collect_driver = DynamicStepDriver(
+        train_env,
+        agent.collect_policy,
+        observers=[replay_buffer.add_batch],
+        num_steps=20
+    )
+    
+    collect_driver.run = function(collect_driver.run)
     time_step = petris_environment.reset()
+    policy_state = agent.collect_policy.get_initial_state(train_env.batch_size)
 
     logger.info("Running for %s episodes", episodes)
 
@@ -169,20 +176,15 @@ def train_dqn(episodes: int = 20, batch_size: int = 1, log_interval: int = 200, 
         logger.info("Running Episode: %s", episode)
 
         logger.info("Collecting Episode Information")
-        time_step, _ = collect_driver.run(time_step)
+        time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
+        logger.info("Time Step: %s", time_step)
 
-        logger.info("Gathering and assessing experience")
-        experience, unused_info = next(iterator)
-
-        logger.info("Getting Training Loss")
-        train_loss = dqn_agent.train(experience=experience).loss
-
-        step = dqn_agent.train_step_counter.numpy()
-        logger.info("Step = %s: loss = %s", step, train_loss)
-
-        if step % eval_interval == 0:
-            # TODO: Compute average return here
-            pass
+        for _ in range(20):
+            experience, _ = next(iterator)
+            train_loss = agent.train(experience)
+            logger.info("Train Loss: %s", train_loss)
+        
+        replay_buffer.clear()
     
     logger.info("Finishing Training...")
 

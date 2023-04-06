@@ -89,8 +89,8 @@ class PetrisEnvironment(PyEnvironment):
             rotate()
 
         # Update the state after action
-        self._state = np.array(self._game_scene.tetris_map).flatten().tolist()
-    
+        self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
+        
     def _reset(self) -> TimeStep:
         """
         Resets the environment state for a new game
