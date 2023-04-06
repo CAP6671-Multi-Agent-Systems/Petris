@@ -15,6 +15,7 @@ sys.path.append(str(Path().parent))
 from src import paths
 from src.log.log import initialize_logger
 from src.agents.dqn import train_dqn
+from src.agents.reinforce_agent import train_reinforce
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,6 @@ def main(agent: str, debug: bool = False) -> int:
     Args:
         agent: The agent to train.
         debug: Flag to display debug logs
-
     Returns:
         int: Exit code
     """
@@ -44,6 +44,8 @@ def main(agent: str, debug: bool = False) -> int:
 
         if agent.lower() == "dqn":
             train_dqn(episodes=1, batch_size=5)
+        elif agent.lower() == "reinforce":
+            train_reinforce()
     except Exception as ex:
         exit_code = 1
         logger.exception(ex)
@@ -62,5 +64,4 @@ if __name__ == "__main__":
                         help="Displays the debug logs.")
 
     args, _ = parser.parse_known_args()
-
     sys.exit(main(agent=args.agent, debug=args.debug))
