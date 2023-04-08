@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 from typing import Any, Callable, Optional, Sequence, Tuple
 
+import sys
 import numpy as np
 from typing import List
 from tf_agents.drivers import driver
@@ -32,6 +33,7 @@ class ReinforceDriver(driver.Driver):
       max_steps: Optional[types.Int] = None,
       max_episodes: Optional[types.Int] = None,
       end_episode_on_boundary: bool = True):
+    super(ReinforceDriver, self).__init__(env, policy, observers, transition_observers)
 
     max_steps = max_steps or 0
     max_episodes = max_episodes or 0
@@ -39,7 +41,6 @@ class ReinforceDriver(driver.Driver):
       raise ValueError(
           'Either `max_steps` or `max_episodes` should be greater than 0.')
 
-    super(ReinforceDriver, self).__init__(env, policy, observers, transition_observers)
     self._max_steps = max_steps or np.inf
     self._max_episodes = max_episodes or np.inf
     self._end_episode_on_boundary = end_episode_on_boundary
@@ -56,35 +57,38 @@ class ReinforceDriver(driver.Driver):
     keyboard_events : List[Event] = []
     
     while num_steps < self._max_steps and num_episodes < self._max_episodes:
-      Scenes.active_scene.process_input(events=keyboard_events)
-      keyboard_events = pygame.event.get() 
-      # For now we reset the policy_state for non batched envs.
-      if not self.env.batched and time_step.is_first() and num_episodes > 0:
-        policy_state = self._policy.get_initial_state(self.env.batch_size or 1)
+        
+        keyboard_events = pygame.event.get() 
+        Scenes.active_scene.process_input(events=keyboard_events)
+        
+        # For now we reset the policy_state for non batched envs.
+        if not self.env.batched and time_step.is_first() and num_episodes > 0:
+            policy_state = self._policy.get_initial_state(self.env.batch_size or 1)
 
-      action_step = self.policy.action(time_step, policy_state)
-      next_time_step = self.env.step(action_step.action)
+        action_step = self.policy.action(time_step, policy_state)
+        next_time_step = self.env.step(action_step.action)
+        
+        # When using observer (for the purpose of training), only the previous
+        # policy_state is useful. Therefore substitube it in the PolicyStep and
+        # consume it w/ the observer.
+        action_step_with_previous_state = action_step._replace(state=policy_state)
+        traj = trajectory.from_transition(
+            time_step, action_step_with_previous_state, next_time_step)
+        for observer in self._transition_observers:
+            observer((time_step, action_step_with_previous_state, next_time_step))
+        for observer in self.observers:
+            observer(traj)
+
+        if self._end_episode_on_boundary:
+            num_episodes += np.sum(traj.is_boundary())
+        else:
+            num_episodes += np.sum(traj.is_last())
+
+        num_steps += np.sum(~traj.is_boundary())
+
+        time_step = next_time_step
+        policy_state = action_step.state
       
-      # When using observer (for the purpose of training), only the previous
-      # policy_state is useful. Therefore substitube it in the PolicyStep and
-      # consume it w/ the observer.
-      action_step_with_previous_state = action_step._replace(state=policy_state)
-      traj = trajectory.from_transition(
-          time_step, action_step_with_previous_state, next_time_step)
-      for observer in self._transition_observers:
-        observer((time_step, action_step_with_previous_state, next_time_step))
-      for observer in self.observers:
-        observer(traj)
-
-      if self._end_episode_on_boundary:
-        num_episodes += np.sum(traj.is_boundary())
-      else:
-        num_episodes += np.sum(traj.is_last())
-
-      num_steps += np.sum(~traj.is_boundary())
-
-      time_step = next_time_step
-      policy_state = action_step.state
-
-      render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
+        render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
+      
     return time_step, policy_state

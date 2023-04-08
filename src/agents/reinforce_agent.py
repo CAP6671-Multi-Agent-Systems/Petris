@@ -126,7 +126,7 @@ def create_reinforce(env: TFPyEnvironment) -> reinforce_agent.ReinforceAgent:
 
     return agent
 
-def train_reinforce(main_screen: Surface, clock: Clock, speed: int, epochs: int = 1, log_interval: int = 1, num_eval_episodes: int = 10, eval_interval: int = 10):
+def train_reinforce(main_screen: Surface, clock: Clock, speed: int, epochs: int = 10, log_interval: int = 1, num_eval_episodes: int = 10, eval_interval: int = 10):
     # init environment 
     petris_environment = PetrisEnvironment()
     train_enivronment = TFPyEnvironment(environment=petris_environment)
@@ -162,7 +162,13 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, epochs: int 
         logger.info("Running Epoch: %s", i)
 
         # Save episodes to the replay buffer
-        collect_episode(petris_environment, reinforce_agent.collect_policy, rb_observer=rb_observer, num_episodes=1, main_screen=main_screen, clock=clock, speed=speed)
+        collect_episode(petris_environment, 
+                        reinforce_agent.collect_policy, 
+                        rb_observer=rb_observer, 
+                        num_episodes=1, 
+                        main_screen=main_screen, 
+                        clock=clock, 
+                        speed=speed)
 
         # Update the agent's network using the buffer data
         iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))

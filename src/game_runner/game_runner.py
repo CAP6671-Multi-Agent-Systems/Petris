@@ -4,7 +4,7 @@
 import pygame
 from pygame.time import Clock
 from pygame.surface import Surface
-from src.scenes.scenes import Scenes
+from src.scenes.scenes import Scenes, TitleScene
 
 
 def render_active_scene(main_screen: Surface, clock: Clock, speed: int) -> None:
