@@ -31,6 +31,8 @@ from src.custom_driver.petris_driver import PetrisDriver
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
+from src.checkpointer.checkpointer import create_checkpointer
+from src.policy_saver.policy_saver import TFPolicySaver
 
 logger = logging.getLogger(__name__) 
 
@@ -121,7 +123,9 @@ def visualize_metrics(metric, num_epochs, num_evaluations, iteration, is_loss):
 
     save_json(results=metric, iteration=iteration, is_loss=is_loss)
 
-def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_agent.ReinforceAgent:
+def create_reinforce(env: TFPyEnvironment, 
+                     parameters: Parameters,
+                     train_step_counter: tf.Variable = tf.Variable(0)) -> reinforce_agent.ReinforceAgent:
     logger.info("Creating agent")
     # Actor network 
     actor_net = actor_distribution_network.ActorDistributionNetwork(
@@ -132,9 +136,6 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     # NOTE: .001 lr was the example used by the docs
     optimizer = tf.keras.optimizers.Adam(learning_rate=parameters.learning_rate)
-
-    # Keeps track 
-    train_step_counter = tf.Variable(0)
     
     # TODO: Create global_step and set it to 'train_step_counter'
     agent = reinforce_agent.ReinforceAgent(
@@ -158,8 +159,12 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
 
     parameters = parameters.params.agent
 
+    global_step = tf.compat.v1.train.get_or_create_global_step()
+
     # Init the actor network, optimizer, and agent 
-    reinforce_agent = create_reinforce(env=train_enivronment, parameters=parameters)
+    reinforce_agent = create_reinforce(env=train_enivronment, 
+                                       parameters=parameters,
+                                       train_step_counter=global_step)
     logger.info("Agent Created")
 
     # TODO: THESE POLICIES ARE UNUSED, FIND CORRECT USE
@@ -175,6 +180,12 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
 
     # Reset the train step
     reinforce_agent.train_step_counter.assign(0)
+
+    checkpoint = create_checkpointer(name="reinforce", 
+                                     agent=reinforce_agent, 
+                                     replay_buffer=replay_buffer, 
+                                     global_step=global_step)
+    policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
 
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")
@@ -220,6 +231,10 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
             avg_return = compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, i, iteration, "Reinforce")
             print('step = {0}: Average Return = {1}'.format(step, avg_return))
             returns.append(avg_return)
+            
+        if step % parameters.save_interval == 0  and step != 0:
+            checkpoint.save(global_step=global_step)
+            policy_saver.save()
 
     # Save plots for loss and returns
     visualize_metrics(losses, parameters.epochs, parameters.log_interval, iteration, False)
