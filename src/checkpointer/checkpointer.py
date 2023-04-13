@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_DIR = paths.BASE_DIR / "checkpoint"
 
 
-def create_checkpointer(agent: TFAgent,
+def create_checkpointer(name: str,
+                        agent: TFAgent,
                         replay_buffer: ReplayBuffer,
                         global_step: Variable,
                         max_to_keep: int = 1) -> Checkpointer:
@@ -22,6 +23,7 @@ def create_checkpointer(agent: TFAgent,
     Creates the checkpointer object as well as the 'checkpoint' directory.
 
     Args:
+        name (str): Name of the training agent
         agent (TFAgent): Agent that is being trained
         replay_buffer (ReplayBuffer): Replay buffer for the agent
         global_step (Variable): Global step needed for the checkpoint
@@ -32,6 +34,8 @@ def create_checkpointer(agent: TFAgent,
     """
     
     CHECKPOINT_DIR.mkdir(exist_ok=True)
+    checkpointer_dir = CHECKPOINT_DIR / name
+    checkpointer_dir.mkdir(exist_ok=True)
     
     train_checkpointer = Checkpointer(
         ckpt_dir=CHECKPOINT_DIR,

@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 POLICY_DIR = paths.BASE_DIR / "policy"
 
 
-def create_policy_saver(agent: TFAgent) -> PolicySaver:
-    """
-    Creates a new policy saver for the 'agent' as well as the 'policy' directory.
+class TFPolicySaver:
+    """PolicySaver wrapper class"""
 
-    Args:
-        agent (TFAgent): Agent being trained
+    def __init__(self, name: str, agent: TFAgent):
+        self._name = name
+        self._agent = agent
+        POLICY_DIR.mkdir(exist_ok=True)
+        self._policy_dir = POLICY_DIR / name
+        self._policy_dir.mkdir(exist_ok=True)
+        self._policy_saver = PolicySaver(policy=self._agent.policy)
 
-    Returns:
-        PolicySaver: PolicySaver instance to use
-    """
-    
-    POLICY_DIR.mkdir(exist_ok=True)
-    
-    return PolicySaver(policy=agent.policy)
+    def save(self) -> None:
+        """Saves the policy in the directory"""
+        self._policy_saver.save(export_dir=self._policy_dir)
