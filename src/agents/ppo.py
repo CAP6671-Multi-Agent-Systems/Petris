@@ -142,7 +142,8 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, parameters: Parame
     env = PetrisEnvironment(parameters=parameters)
     train_env = TFPyEnvironment(environment=env)
     eval_env = TFPyEnvironment(environment=env)
-
+    
+    num_iterations = parameters.iterations.num_iterations
     result_parameters = parameters
     parameters = parameters.params.agent
 
@@ -178,7 +179,7 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, parameters: Parame
                                      agent=agent,
                                      replay_buffer=replay_buffer,
                                      global_step=global_step,
-                                     max_to_keep=5)
+                                     max_to_keep=num_iterations)
     policy_saver = TFPolicySaver(name="ppo", agent=agent)
     
     checkpoint.initialize_or_restore()

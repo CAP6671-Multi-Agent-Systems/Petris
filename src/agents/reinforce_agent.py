@@ -156,6 +156,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
     train_enivronment = TFPyEnvironment(environment=petris_environment)
     eval_environment = TFPyEnvironment(environment=petris_environment)
 
+    num_iterations = parameters.iterations.num_iterations
     parameters = parameters.params.agent
 
     global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -183,7 +184,8 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
     checkpoint = create_checkpointer(name="reinforce", 
                                      agent=reinforce_agent, 
                                      replay_buffer=replay_buffer, 
-                                     global_step=global_step)
+                                     global_step=global_step,
+                                     max_to_keep=num_iterations)
     policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
 
     checkpoint.initialize_or_restore()
