@@ -10,7 +10,7 @@
 			"num_eval_episodes": 1,
 			"eval_interval": 10,
 			"collect_num_episodes": 1,
-			"save_interval": 100
+			"save_interval": 10
 		},
 		"environment": {
 			"max_actions": 500,
@@ -23,7 +23,7 @@
 		}
 	},
 	"iterations": {
-		"num_iterations": 5,
+		"num_iterations": 1,
 		"delta": -3,
 		"index": 1,
 		"to_change": ["agent", "layers"]
