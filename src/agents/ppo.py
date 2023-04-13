@@ -180,6 +180,8 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, parameters: Parame
                                      global_step=global_step,
                                      max_to_keep=5)
     policy_saver = TFPolicySaver(name="ppo", agent=agent)
+    
+    checkpoint.initialize_or_restore()
 
     avg_return =  0.00 #compute_avg_return(eval_env, agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "PPO")
     average_returns = [avg_return]

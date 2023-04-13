@@ -186,6 +186,8 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
                                      global_step=global_step)
     policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
 
+    checkpoint.initialize_or_restore()
+
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")
     avg_return =  0#compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "Reinforce")
