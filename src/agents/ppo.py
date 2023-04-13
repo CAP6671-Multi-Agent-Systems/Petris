@@ -100,7 +100,6 @@ def create_ppo(env: TFPyEnvironment,
                parameters: Parameters,
                train_step_counter: tf.Variable = tf.Variable(0)) -> PPOAgent:
 
-    # TODO: Create global_step and set it to 'train_step_counter'
     agent = PPOAgent(
         env.time_step_spec(),
         env.action_spec(),

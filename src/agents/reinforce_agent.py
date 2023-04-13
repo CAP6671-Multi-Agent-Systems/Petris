@@ -137,7 +137,6 @@ def create_reinforce(env: TFPyEnvironment,
     # NOTE: .001 lr was the example used by the docs
     optimizer = tf.keras.optimizers.Adam(learning_rate=parameters.learning_rate)
     
-    # TODO: Create global_step and set it to 'train_step_counter'
     agent = reinforce_agent.ReinforceAgent(
         env.time_step_spec(),
         env.action_spec(),
