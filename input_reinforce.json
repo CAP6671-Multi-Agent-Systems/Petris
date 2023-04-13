@@ -23,7 +23,7 @@
 		}
 	},
 	"iterations": {
-		"num_iterations": 1,
+		"num_iterations": 2,
 		"delta": -3,
 		"index": 1,
 		"to_change": ["agent", "layers"]
