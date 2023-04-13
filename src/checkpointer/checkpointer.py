@@ -38,7 +38,7 @@ def create_checkpointer(name: str,
     checkpointer_dir.mkdir(exist_ok=True)
     
     train_checkpointer = Checkpointer(
-        ckpt_dir=CHECKPOINT_DIR,
+        ckpt_dir=checkpointer_dir,
         max_to_keep=max_to_keep,
         agent=agent,
         policy=agent.policy,
