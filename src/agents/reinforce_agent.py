@@ -135,7 +135,8 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     # Keeps track 
     train_step_counter = tf.Variable(0)
-
+    
+    # TODO: Create global_step and set it to 'train_step_counter'
     agent = reinforce_agent.ReinforceAgent(
         env.time_step_spec(),
         env.action_spec(),

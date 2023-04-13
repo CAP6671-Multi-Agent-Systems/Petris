@@ -94,13 +94,15 @@ def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, mai
     driver.run(main_screen, clock, speed, epoch, iteration, time_step, policy_state)
 
 def create_ppo(env: TFPyEnvironment, actor_network: ActorDistributionRnnNetwork, value_network: ValueRnnNetwork, parameters: Parameters) -> PPOAgent:
+    
+    # TODO: Create global_step and set it to 'train_step_counter'
     agent = PPOAgent(
         env.time_step_spec(),
         env.action_spec(),
         optimizer=keras.optimizers.Adam(learning_rate=parameters.learning_rate),
         actor_net=actor_network,
         value_net=value_network,
-        train_step_counter=tf.Variable(0)    
+        train_step_counter=tf.Variable(0)
         )
     
     agent.initialize()
