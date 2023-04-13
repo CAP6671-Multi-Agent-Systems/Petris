@@ -11,7 +11,6 @@ from src import paths
 
 logger = logging.getLogger(__name__)
 
-
 CHECKPOINT_DIR = paths.BASE_DIR / "checkpoint"
 
 

@@ -9,7 +9,6 @@ from src import paths
 
 logger = logging.getLogger(__name__)
 
-
 POLICY_DIR = paths.BASE_DIR / "policy"
 
 
