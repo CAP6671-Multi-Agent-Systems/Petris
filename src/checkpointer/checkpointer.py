@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_DIR = paths.BASE_DIR / "checkpoint"
 
 
-
 def create_checkpointer(agent: TFAgent,
                         replay_buffer: ReplayBuffer,
                         global_step: Variable,
