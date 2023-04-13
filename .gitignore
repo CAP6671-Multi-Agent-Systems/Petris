@@ -169,3 +169,7 @@ logs/*
 
 # results
 results/*
+
+# Saved checkpoints and policies
+checkpoint/*
+policy/* 
