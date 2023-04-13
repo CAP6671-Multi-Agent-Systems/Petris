@@ -132,6 +132,6 @@ if __name__ == "__main__":
     
     args, _ = parser.parse_known_args()
     
-    sys.exit(main(speed=args.speed, 
-                  paramFile = args.parameters,
+    sys.exit(main(speed=args.speed,
+                  paramFile=args.parameters,
                   debug=args.debug))
