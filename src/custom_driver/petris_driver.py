@@ -78,7 +78,6 @@ class PetrisDriver(driver.Driver):
             
             # This is dangerous but it allows for a cleaner quit
             sys.exit()
-            return
 
       # For now we reset the policy_state for non batched envs.
       if not self.env.batched and time_step.is_first() and num_episodes > 0:

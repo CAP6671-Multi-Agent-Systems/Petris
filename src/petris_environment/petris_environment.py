@@ -74,6 +74,8 @@ class PetrisEnvironment(PyEnvironment):
 
         self._collision_detected = False
         
+        self._down_reward = 0
+        
     def collision_detected(self) -> bool:
         return self._collision_detected
 
