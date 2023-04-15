@@ -7,6 +7,7 @@ from typing import List
 
 import matplotlib as plt
 import tensorflow as tf
+from pandas import DataFrame,concat
 import numpy as np
 import reverb
 import pygame
@@ -27,6 +28,8 @@ from tf_agents.utils import common
 
 from src.params.parameters import Parameters
 from src.metrics.save_metrics import plot_one, save_json
+from src.metrics.metrics import Metrics
+from src.observers.metrics_observer import MetricsObserver
 from src.custom_driver.petris_driver import PetrisDriver
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
@@ -82,7 +85,7 @@ def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, mai
                 epsilon=parameters.epsilon
             ), use_tf_function=True
         ),
-        [rb_observer],
+        observers,
         max_episodes=parameters.collect_num_episodes,
         agent=agent
     )
@@ -113,6 +116,7 @@ def compute_avg_return(env: TFPyEnvironment, policy, num_episodes, main_screen, 
 
     avg_return = total_return / num_episodes
     return avg_return.numpy()[0]
+
 
 def visualize_metrics(metric, num_epochs, num_evaluations, iteration, is_loss):
     steps = range(0, num_epochs + 1, num_evaluations)
@@ -197,20 +201,24 @@ def train_reinforce(main_screen: Surface,
 
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")
+    
+    metrics = Metrics()
     avg_return =  0#compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "Reinforce")
-    returns = [avg_return]
-    losses = [0.00]
+    loss = 0.00
+    output_data = DataFrame(data=[0.00,0.00], columns=['return','loss'])
 
     logger.info("Running for %s epochs", parameters.epochs)
 
     for i in range(parameters.epochs):
         logger.info("Running Epoch: %s", i)
+        avg_return = 0
+        loss = 0.00
 
         # Save episodes to the replay buffer
         collect_episode(
             petris_environment, 
             reinforce_agent.collect_policy, 
-            rb_observer=rb_observer, 
+            observers=[rb_observer,metrics.metrics_observer()], 
             parameters=parameters, 
             main_screen=main_screen, 
             clock=clock, 
@@ -232,7 +240,7 @@ def train_reinforce(main_screen: Surface,
         print(f"Train step counter: {step}")
 
         if step % parameters.log_interval == 0:
-            losses.append(train_loss.loss.numpy())
+            loss = train_loss.loss.numpy()
             print('step = {0}: loss = {1}'.format(step, train_loss.loss))
 
         if step % parameters.eval_interval == 0 and step != 0:
@@ -243,10 +251,12 @@ def train_reinforce(main_screen: Surface,
         if step % parameters.save_interval == 0  and step != 0:
             checkpoint.save(global_step=global_step)
             policy_saver.save()
+        append = DataFrame([[avg_return,loss]])
+        concat([output_data,append], ignore_index=True)
 
     # Save plots for loss and returns
-    visualize_metrics(losses, parameters.epochs, parameters.log_interval, iteration, False)
-    visualize_metrics(returns, parameters.epochs, parameters.eval_interval, iteration, True)
+    visualize_metrics(output_data['loss'].tolist(), parameters.epochs, parameters.log_interval, iteration, True)
+    visualize_metrics(output_data['return'].tolist(), parameters.epochs, parameters.eval_interval, iteration, False)
 
 def play_reinforce_agent(env: TFPyEnvironment, main_screen: Surface, clock: Clock, speed: int, num_episodes: int = 5) -> None:
     """
