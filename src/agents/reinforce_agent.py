@@ -72,6 +72,7 @@ def create_replay_buffer(agent: reinforce_agent.ReinforceAgent, replay_buffer_le
 
     return replay_buffer, rb_observer
 
+
 def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, main_screen, clock, speed, epoch, iteration, agent):
     driver = PetrisDriver(
         env, 
@@ -150,7 +151,11 @@ def create_reinforce(env: TFPyEnvironment,
 
     return agent
 
-def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: Parameters, iteration: int = 0):
+def train_reinforce(main_screen: Surface, 
+                    clock: Clock, 
+                    speed: int, 
+                    parameters: Parameters, 
+                    iteration: int = 0):
     # init environment 
     petris_environment = PetrisEnvironment(parameters=parameters)
     train_enivronment = TFPyEnvironment(environment=petris_environment)
