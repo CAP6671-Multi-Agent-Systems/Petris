@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple
 
 import sys
 import numpy as np
+import logging
 from typing import List
 from tf_agents.drivers import driver
 from tf_agents.environments import py_environment
@@ -19,6 +20,9 @@ from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 
 from tf_agents.typing import types
+
+logger = logging.getLogger(__name__)
+
 
 class ReinforceDriver(driver.Driver):
   """A driver that runs a python policy in a python environment."""
@@ -60,6 +64,12 @@ class ReinforceDriver(driver.Driver):
         
         keyboard_events = pygame.event.get() 
         Scenes.active_scene.process_input(events=keyboard_events)
+        
+        # Press escape to stop the entire game.            
+        for event in keyboard_events:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                logger.info("Stopping Agent...")
+                sys.exit()
         
         # For now we reset the policy_state for non batched envs.
         if not self.env.batched and time_step.is_first() and num_episodes > 0:
