@@ -75,9 +75,8 @@ class PetrisDriver(driver.Driver):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             logger.info("Stopping Agent...")
             pygame.quit()
-            
-            # This is dangerous but it allows for a cleaner quit
             sys.exit()
+            # This is dangerous but it allows for a cleaner quit
 
       # For now we reset the policy_state for non batched envs.
       if not self.env.batched and time_step.is_first() and num_episodes > 0:
