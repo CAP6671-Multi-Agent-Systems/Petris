@@ -25,7 +25,7 @@ from src.params.parameters import Parameters, get_nested_value
 from src.petris_environment.petris_environment import PetrisEnvironment
 from src.game_runner.game_runner import play_game
 from src.agents.random_agent import play_random_agent
-from src.agents.dqn import play_dqn_agent
+from src.agents.dqn import play_dqn_agent, train_dqn
 from src.agents.ppo import train_ppo
 from src.agents.reinforce_agent import train_reinforce
 from tf_agents.environments.tf_py_environment import TFPyEnvironment
@@ -90,13 +90,13 @@ def main(speed: int, paramFile: Optional[str] = None , debug: bool = False) -> i
                                     speed=speed, 
                                     num_episodes=parameters.agent.epoch)
                 elif agent and agent.lower() == "dqn":
-                    tf_env = TFPyEnvironment(environment=PetrisEnvironment(parameters=parameters))
-                    play_dqn_agent(env=tf_env, main_screen=main_screen, clock=clock, speed=speed)
+                    logger.info("Training DQN")
+                    train_dqn(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, iteration=iteration)
                 elif agent and agent.lower() == "reinforce":
-                    print("Training Reinforce")
+                    logger.info("Training Reinforce")
                     train_reinforce(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, iteration=iteration)
                 elif agent and agent.lower() == "ppo":
-                    print("Training PPO")
+                    logger.info("Training PPO")
                     train_ppo(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, iteration=iteration)
                 prev = get_nested_value(parameters.params,parameters.iterations.to_change, parameters.iterations.index)
                 parameters.update_param(
