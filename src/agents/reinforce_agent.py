@@ -85,7 +85,7 @@ def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, mai
                 epsilon=parameters.epsilon
             ), use_tf_function=True
         ),
-        observers,
+        rb_observer,
         max_episodes=parameters.collect_num_episodes,
         agent=agent
     )
@@ -210,15 +210,15 @@ def train_reinforce(main_screen: Surface,
     logger.info("Running for %s epochs", parameters.epochs)
 
     for i in range(parameters.epochs):
-        logger.info("Running Epoch: %s", i)
         avg_return = -1
         loss = 0.00
 
+        logger.info("Collecting Episode: %s", i)
         # Save episodes to the replay buffer
         collect_episode(
             petris_environment, 
             reinforce_agent.collect_policy, 
-            observers=[rb_observer,metrics.metrics_observer()], 
+            rb_observer=[rb_observer,metrics.metrics_observer()], 
             parameters=parameters, 
             main_screen=main_screen, 
             clock=clock, 
@@ -227,6 +227,8 @@ def train_reinforce(main_screen: Surface,
             iteration=iteration, 
             agent="Reinforce"
         )
+        
+        logger.info("Gathering Trajectories")
         # Update the agent's network using the buffer data
         iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
         trajectories, _ = next(iterator)
@@ -234,6 +236,7 @@ def train_reinforce(main_screen: Surface,
 
         replay_buffer.clear()
 
+        logger.info("Checking Step")
         # Keeps track of how many times the agent has been trained
         step = reinforce_agent.train_step_counter.numpy()
 
@@ -243,6 +246,7 @@ def train_reinforce(main_screen: Surface,
             avg_return = compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, i, iteration, "Reinforce")
             logger.info('step = {0}: Average Return = {1}'.format(step, avg_return))
 
+        logger.info("Saving Dataframe")
         append = DataFrame(data=[[i+1,avg_return,loss,metrics.metrics_observer().lines_placed]], columns=['epoch','return','loss','lines_cleared'])
         output_data = concat([output_data,append], ignore_index=True)
     return output_data
