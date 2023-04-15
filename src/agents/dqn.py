@@ -18,6 +18,7 @@ from tf_agents.metrics import tf_metrics
 from tf_agents.networks import sequential
 from tf_agents.policies import py_tf_eager_policy
 from tf_agents.policies import random_tf_policy
+from tf_agents.policies import epsilon_greedy_policy
 from tf_agents.replay_buffers import reverb_replay_buffer
 from tf_agents.replay_buffers import reverb_utils
 from tf_agents.trajectories import trajectory
@@ -25,6 +26,7 @@ from tf_agents.specs import tensor_spec
 from tf_agents.utils import common
 from tf_agents.utils.common import function
 from tf_agents.drivers.dynamic_step_driver import DynamicStepDriver
+from src.params.parameters import Parameters
 
 
 import pygame
@@ -39,7 +41,10 @@ from tf_agents.environments.tf_py_environment import TFPyEnvironment
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
-from src.custom_driver.reinforce_driver import ReinforceDriver
+from src.custom_driver.petris_driver import PetrisDriver
+
+from src.checkpointer.checkpointer import create_checkpointer
+from src.policy_saver.policy_saver import TFPolicySaver
 
 logger = logging.getLogger(__name__)
  
@@ -83,7 +88,7 @@ def create_replay_buffer(agent: dqn_agent.DdqnAgent, replay_buffer_length: int =
     return replay_buffer, rb_observer
 
 
-def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
+def create_dqn(env: TFPyEnvironment, train_step_counter: tf.Variable = tf.Variable(0)) -> dqn_agent.DqnAgent:
     """_summary_
 
     Args:
@@ -113,7 +118,7 @@ def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
         q_network=q_net,
         optimizer=keras.optimizers.Adam(learning_rate=0.2),
         td_errors_loss_fn=common.element_wise_squared_loss,
-        train_step_counter=tf.Variable(0)
+        train_step_counter=train_step_counter
     )
     
     agent.initialize()
@@ -123,51 +128,116 @@ def create_dqn(env: TFPyEnvironment) -> dqn_agent.DqnAgent:
     return agent
 
 
-def collect_episode(env: PetrisEnvironment, policy, rb_observer, num_episodes, main_screen, clock, speed):
-    driver = ReinforceDriver(
+def collect_episode(env: PetrisEnvironment, 
+                    policy, 
+                    rb_observer, 
+                    parameters, 
+                    main_screen, 
+                    clock, 
+                    speed, 
+                    epoch, 
+                    iteration, 
+                    agent):
+    driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
-            policy, use_tf_function=True
+            policy, 
+            use_tf_function=True
         ),
         [rb_observer],
-        max_episodes=num_episodes
+        max_episodes=parameters.collect_num_episodes,
+        agent=agent
     )
     initial_time_step = env.reset()
-    driver.run(main_screen, clock, speed, initial_time_step)
+    driver.run(main_screen, clock, speed, epoch, iteration, initial_time_step)
+
+# # Metrics and evaluation function
+# def compute_avg_return(env: TFPyEnvironment, 
+#                        policy, 
+#                        num_episodes, 
+#                        main_screen, 
+#                        clock, 
+#                        speed, 
+#                        epoch, 
+#                        iteration, 
+#                        agent):
+
+#     total_return = 0.0
+
+#     for _ in range(num_episodes):
+#         pygame.display.set_caption(f"EVALUATION | {agent} | Iteration {iteration+1} | Epoch {epoch+1} | Episode {_+1}")
+#         keyboard_events : List[Event] = []
+#         time_step = env.reset()
+#         episode_return = 0.0
+
+#         while not time_step.is_last():
+#             Scenes.active_scene.process_input(events=keyboard_events)
+#             keyboard_events = pygame.event.get()
+
+#             action_step = policy.action(time_step)
+#             #logger.info("Manual steps (avg return)")
+#             time_step = env.step(action_step.action)
+#             episode_return += time_step.reward
+#             render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
+#         total_return += episode_return
+
+#     avg_return = total_return / num_episodes
+#     return avg_return.numpy()[0]
 
 
 def train_dqn(main_screen: Surface,
               clock: Clock,
               speed: int, 
-              episodes: int = 20, 
-              batch_size: int = 1, 
-              log_interval: int = 200, 
-              eval_interval: int = 1000) -> None:
+              parameters: Parameters, 
+              iteration: int = 0) -> None:
     """Creates and Trains a DQN agent."""
 
-    petris_environment = PetrisEnvironment()
+    petris_environment = PetrisEnvironment(parameters=parameters)
     train_env = TFPyEnvironment(environment=petris_environment)
 
+    num_iterations = parameters.iterations.num_iterations
+    parameters = parameters.params.agent
+
+    global_step = tf.compat.v1.train.get_or_create_global_step()
+
     # Set up agent 
-    agent = create_dqn(env=train_env)
+    agent = create_dqn(env=train_env, train_step_counter=global_step)
 
     replay_buffer, rb_observer = create_replay_buffer(agent=agent)
     
     agent.train = function(agent.train)
     agent.train_step_counter.assign(0)
 
-    logger.info("Running for %s episodes", episodes)
+    checkpoint = create_checkpointer(name="dqn", 
+                                     agent=agent, 
+                                     replay_buffer=replay_buffer, 
+                                     global_step=global_step,
+                                     max_to_keep=num_iterations)
+    policy_saver = TFPolicySaver(name="dqn", agent=agent)
 
-    for episode in range(episodes):
-        logger.info("Running Episode: %s", episode)
+    checkpoint.initialize_or_restore()
+
+    avg_return =  0#compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "Reinforce")
+    returns = [avg_return]
+    losses = [0.00]
+
+    logger.info("Running for %s epochs", parameters.epochs)
+
+    for epoch in range(parameters.epochs):
+        logger.info("Running Episode: %s", epoch)
         
-        collect_episode(env=petris_environment, 
-                        policy=agent.collect_policy, 
-                        rb_observer=rb_observer, 
-                        num_episodes=1, 
-                        main_screen=main_screen, 
-                        clock=clock, 
-                        speed=speed)
+        collect_episode(
+            petris_environment, 
+            agent.collect_policy, 
+            rb_observer=rb_observer, 
+            parameters=parameters, 
+            main_screen=main_screen, 
+            clock=clock, 
+            speed=speed, 
+            epoch=epoch, 
+            iteration=iteration, 
+            agent="DQN"
+        )
 
         logger.info("Collecting Episode Information")
         iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
@@ -180,29 +250,17 @@ def train_dqn(main_screen: Surface,
         replay_buffer.clear()
         step = agent.train_step_counter.numpy()
         
-        if step % log_interval == 0:
+        if step % parameters.log_interval == 0:
+            losses.append(train_loss.loss.numpy())
             logger.info('step = {0}: loss = {1}'.format(step, train_loss.loss))
 
+        if step % parameters.save_interval == 0  and step != 0:
+            checkpoint.save(global_step=global_step)
+            policy_saver.save()
+        
     
     logger.info("Finishing Training...")
 
-# Function to test the environment using a fixed policy 
-def fixed_policy_test(env: TFPyEnvironment):
-    # Define the possible actions that can be used in our environment 
-    move_down_action = tf.constant([0], dtype=tf.int32)
-    move_right_action = tf.constant([1], dtype=tf.int32)
-    move_left_action = tf.constant([2], dtype=tf.int32)
-    rotate_action = tf.constant([3], dtype=tf.int32)
-
-    # print("DQN fixed policy current time step:", time_step)
-    # cumulative_reward = time_step.reward
-
-    time_step = env.step(move_down_action)
-    print("DQN fixed policy during play:", time_step)
-    # cumulative_reward += time_step.reward
-        
-    # print("DQN Final Reward = ", cumulative_reward)
-    return time_step
 
 def play_dqn_agent(env: TFPyEnvironment, main_screen: Surface, clock: Clock, speed: int, num_episodes: int = 5) -> None:
     """
