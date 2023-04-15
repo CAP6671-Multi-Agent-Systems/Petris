@@ -24,7 +24,7 @@
     "iterations":{
        "num_iterations": 20,
         "delta": 5,
-        "index": 1
+        "index": 1,
         "to_change": ["agent","layers"]
     }
 }
