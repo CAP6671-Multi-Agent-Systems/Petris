@@ -319,7 +319,7 @@ class GameScene(SceneBase):
         # Insert the column array of zeros into each row to complete the entire map
         self.tetris_map = [self.empty_line[:] for _ in range(GameMetaData.map_row_no)]
 
-        logger.info("Tetris Map Shape: (%s, %s)", GameMetaData.map_row_no, GameMetaData.map_column_no)
+        #logger.info("Tetris Map Shape: (%s, %s)", GameMetaData.map_row_no, GameMetaData.map_column_no)
 
         # Get two shapes. First one being the controlling shape and the second one being the next.
         self.moving_object: List[Shape] = [
@@ -334,6 +334,7 @@ class GameScene(SceneBase):
         self.maximum_movement_speed = 5
         self.super_speed_mode = False
         self.game_over = False
+        self.collision = False
 
     def process_input(self, events: List[Event]) -> bool:
         """Process key presses in a running game
@@ -456,7 +457,7 @@ class GameScene(SceneBase):
 
     @staticmethod
     def draw_game_over():
-        logger.info("Drawing Game Over")
+        #ogger.info("Drawing Game Over")
         Scenes.titleScene.is_game_over = True
         Scenes.active_scene = Scenes.titleScene
 
@@ -492,7 +493,8 @@ class GameScene(SceneBase):
 
                 # Mark this location as 'occupied'
                 self.tetris_map[row_idx][col_idx] = get_colour_number_by_name(self.moving_object[0].colour.name)
-            
+                self.collision = True
+                
             if not is_game_over:
                 temp = []
                 
@@ -524,19 +526,35 @@ class GameScene(SceneBase):
             self.calculate_speed()
 
             self.game_over = is_game_over
-            logger.info("Game Over: %s", self.game_over)
+            #logger.info("Game Over: %s", self.game_over)
             
-            logger.info("Tetris Map:")
-            for row in self.tetris_map:
-                logger.info("%s", row)
+            #logger.info("Tetris Map:")
+            #for row in self.tetris_map:
+            #    logger.info("%s", row)
 
         else:
             # Moves object down a unit
             if self.super_speed_mode:
                 State.score += 2
             self.moving_object[0].move_down(self.tetris_map)
-
-
+    
+    def is_block_finished(self) -> bool:
+        if self.moving_object[0].is_finished_or_collided(self.tetris_map):
+            self.movement_speed = 0
+            is_game_over = False
+            
+            # Updating the tetris map by marking the occupied areas.
+            for block in self.moving_object[0].blocks:
+                row_idx = block[0]
+                col_idx = block[1]
+                
+                # If the shape is at the very top then there is no room game over.
+                if row_idx == 0:
+                    return False
+                else:
+                    return True
+        else:
+            return False 
 
 def quit_game() -> bool:
     """Quits the game"""
