@@ -173,3 +173,6 @@ results/*
 # Saved checkpoints and policies
 checkpoint/*
 policy/* 
+results/*/graphs/*
+results/*/output/*
+results/original/
