@@ -83,30 +83,29 @@ class PetrisDriver(driver.Driver):
       if not self.env.batched and time_step.is_first() and num_episodes > 0:
         policy_state = self._policy.get_initial_state(self.env.batch_size or 1)
 
-        action_step = self.policy.action(time_step, policy_state)
-        next_time_step = self.env.step(action_step.action)
-        
-        # When using observer (for the purpose of training), only the previous
-        # policy_state is useful. Therefore substitube it in the PolicyStep and
-        # consume it w/ the observer.
-        action_step_with_previous_state = action_step._replace(state=policy_state)
-        traj = trajectory.from_transition(
-            time_step, action_step_with_previous_state, next_time_step)
-        for observer in self._transition_observers:
-            observer((time_step, action_step_with_previous_state, next_time_step))
-        for observer in self.observers:
-            observer(traj)
-
-        if self._end_episode_on_boundary:
-            num_episodes += np.sum(traj.is_boundary())
-        else:
-            num_episodes += np.sum(traj.is_last())
-
-        num_steps += np.sum(~traj.is_boundary())
-
-        time_step = next_time_step
-        policy_state = action_step.state
+      action_step = self.policy.action(time_step, policy_state)
+      next_time_step = self.env.step(action_step.action)
       
-        render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
-      
+      # When using observer (for the purpose of training), only the previous
+      # policy_state is useful. Therefore substitube it in the PolicyStep and
+      # consume it w/ the observer.
+      action_step_with_previous_state = action_step._replace(state=policy_state)
+      traj = trajectory.from_transition(
+          time_step, action_step_with_previous_state, next_time_step)
+      for observer in self._transition_observers:
+        observer((time_step, action_step_with_previous_state, next_time_step))
+      for observer in self.observers:
+        observer(traj)
+
+      if self._end_episode_on_boundary:
+        num_episodes += np.sum(traj.is_boundary())
+      else:
+        num_episodes += np.sum(traj.is_last())
+
+      num_steps += np.sum(~traj.is_boundary())
+
+      time_step = next_time_step
+      policy_state = action_step.state
+
+      render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
     return time_step, policy_state
