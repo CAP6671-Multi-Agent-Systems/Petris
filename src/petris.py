@@ -91,7 +91,7 @@ def main(speed: int, paramFile: Optional[str] = None , debug: bool = False) -> i
                                     main_screen=main_screen, 
                                     clock=clock, 
                                     speed=speed, 
-                                    num_episodes=parameters.agent.epoch)
+                                    num_episodes=parameters.params.agent.epochs)
                 elif agent and agent.lower() == "dqn":
                     logger.info("Training DQN")
                     train_dqn(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, iteration=iteration)
