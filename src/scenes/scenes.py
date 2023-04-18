@@ -336,6 +336,27 @@ class GameScene(SceneBase):
         self.game_over = False
         self.collision = False
 
+    def move_down(self):
+        self.keyboard_speed = -2
+        self.moving_object[0].move_down(self.tetris_map)
+        logger.debug("Awarded %s Points for Single Push", 2)
+        State.score += 2
+
+    def move_right(self):
+        self.keyboard_speed = -2
+        self.moving_object[0].move_right(self.tetris_map)
+
+    def move_left(self):
+        self.keyboard_speed = -2
+        self.moving_object[0].move_left(self.tetris_map)
+
+    def rotate(self):
+        could_rotate = self.moving_object[0].rotate(self.tetris_map)
+        if could_rotate:
+            rotate_sound.play()
+        else:
+            tilt_rotate_sound.play()
+
     def process_input(self, events: List[Event]) -> bool:
         """Process key presses in a running game
         
@@ -363,28 +384,19 @@ class GameScene(SceneBase):
                 
                 # Shifts shape to the left
                 if event.key == pygame.K_LEFT:
-                    self.keyboard_speed = -2
-                    self.moving_object[0].move_left(self.tetris_map)
+                    self.move_left()
                 
                 # Shifts shape to the right
                 if event.key == pygame.K_RIGHT:
-                    self.keyboard_speed = -2
-                    self.moving_object[0].move_right(self.tetris_map)
+                    self.move_right()
                 
                 # Pushes shape further down
                 if event.key == pygame.K_DOWN and not self.super_speed_mode:
-                    self.keyboard_speed = -2
-                    self.moving_object[0].move_down(self.tetris_map)
-                    logger.debug("Awarded %s Points for Single Push", 2)
-                    State.score += 2
+                    self.move_down()
                 
                 # Rotates the orientation of the shape counter-clockwise
                 if event.key == pygame.K_UP:
-                    could_rotate = self.moving_object[0].rotate(self.tetris_map)
-                    if could_rotate:
-                        rotate_sound.play()
-                    else:
-                        tilt_rotate_sound.play()
+                    self.rotate()
                 
                 # Immediately drops shape down to the bottom.
                 if event.key == pygame.K_SPACE:
