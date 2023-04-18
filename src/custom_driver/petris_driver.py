@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 from typing import Any, Callable, Optional, Sequence, Tuple
 
+import sys
 import numpy as np
 import logging
 import inspect
@@ -73,7 +74,9 @@ class PetrisDriver(driver.Driver):
       for event in keyboard_events:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             logger.info("Stopping Agent...")
-            return
+            pygame.quit()
+            sys.exit()
+            # This is dangerous but it allows for a cleaner quit
 
       # For now we reset the policy_state for non batched envs.
       if not self.env.batched and time_step.is_first() and num_episodes > 0:

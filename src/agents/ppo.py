@@ -30,15 +30,16 @@ from tf_agents.policies.tf_policy import TFPolicy
 from tf_agents.environments.utils import validate_py_environment
 from tf_agents.replay_buffers import reverb_replay_buffer
 from tf_agents.replay_buffers import reverb_utils
-from tf_agents.utils.common import Checkpointer
 
 from src.params.parameters import Parameters
-from src.metrics.save_metrics import plot_one, save_json, save_results
+from src.metrics.save_metrics import plot_one, save_json
 from src.custom_driver.petris_driver import PetrisDriver
 from src.metrics.metrics import Metrics
 from src.petris_environment.petris_environment import PetrisEnvironment
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
+from src.checkpointer.checkpointer import create_checkpointer
+from src.policy_saver.policy_saver import TFPolicySaver
 
 logger = logging.getLogger(__name__) 
 
@@ -119,13 +120,12 @@ def create_ppo(env: TFPyEnvironment, parameters: Parameters) -> PPOAgent:
         optimizer=keras.optimizers.Adam(learning_rate=parameters.learning_rate),
         actor_net=actor_network,
         value_net=value_network,
-        train_step_counter=tf.Variable(0)    
-        )
-    
+        train_step_counter=train_step_counter
+    )
+
     agent.initialize()
-    
     agent.train = function(agent.train)
-    
+
     return agent
 
 def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int, main_screen: Surface, clock: Clock, speed: int, epoch: int, iteration: int, agent: PPOAgent) -> float:
@@ -155,7 +155,8 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, 
     env = PetrisEnvironment(parameters=parameters)
     train_env = TFPyEnvironment(environment=env)
     eval_env = TFPyEnvironment(environment=env)
-
+    
+    num_iterations = parameters.iterations.num_iterations
     result_parameters = parameters
     parameters = parameters.params.agent
 

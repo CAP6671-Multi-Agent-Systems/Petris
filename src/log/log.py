@@ -11,7 +11,7 @@ class LogFormatter(logging.Formatter):
     
     _grey = "\033[37m"
     _white = "\033[39m"
-    _yellow = "\033[103;30m"
+    _yellow = "\033[93m"
     _red = "\033[41m"
     _bold_red = "\x1b[31;1m"
     _reset = "\033[m"

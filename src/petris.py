@@ -25,7 +25,7 @@ from src.params.parameters import Parameters, get_nested_value
 from src.petris_environment.petris_environment import PetrisEnvironment
 from src.game_runner.game_runner import play_game
 from src.agents.random_agent import play_random_agent
-from src.agents.dqn import play_dqn_agent
+from src.agents.dqn import play_dqn_agent, train_dqn
 from src.agents.ppo import train_ppo
 from src.agents.reinforce_agent import train_reinforce
 from src.metrics.metrics import Metrics
@@ -34,8 +34,7 @@ from tf_agents.environments.tf_py_environment import TFPyEnvironment
 logger = logging.getLogger(__name__)
 
 PETRIS_LOG_FILE = "petris.log"
-PETRIS_LOG_DIR = "logs"
-PETRIS_LOG_PATH = paths.BASE_DIR / PETRIS_LOG_DIR / PETRIS_LOG_FILE
+PETRIS_LOG_PATH = paths.LOG_PATH / PETRIS_LOG_FILE
 
 
 def main(speed: int, paramFile: Optional[str] = None , debug: bool = False) -> int:
@@ -92,10 +91,10 @@ def main(speed: int, paramFile: Optional[str] = None , debug: bool = False) -> i
                                     main_screen=main_screen, 
                                     clock=clock, 
                                     speed=speed, 
-                                    num_episodes=parameters.agent.epoch)
+                                    num_episodes=parameters.params.agent.epochs)
                 elif agent and agent.lower() == "dqn":
-                    tf_env = TFPyEnvironment(environment=PetrisEnvironment(parameters=parameters))
-                    train_results = play_dqn_agent(env=tf_env, main_screen=main_screen, clock=clock, speed=speed)
+                    logger.info("Training DQN")
+                    train_dqn(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, iteration=iteration)
                 elif agent and agent.lower() == "reinforce":
                     logger.info("Training Reinforce")
                     train_results = train_reinforce(main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, metrics=metrics, iteration=iteration)
@@ -137,6 +136,6 @@ if __name__ == "__main__":
     
     args, _ = parser.parse_known_args()
     
-    sys.exit(main(speed=args.speed, 
-                  paramFile = args.parameters,
+    sys.exit(main(speed=args.speed,
+                  paramFile=args.parameters,
                   debug=args.debug))

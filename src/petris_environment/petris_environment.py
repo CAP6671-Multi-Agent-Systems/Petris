@@ -60,6 +60,7 @@ class PetrisEnvironment(PyEnvironment):
         # Flag for a game ends. Normally happens when the agent loses.
         self._episode_ended: bool = False
 
+        self._current_num_lines = State.full_line_no
         # Number of actions that has been taken. Used to set a hard stop for the game ()
         self._actions_taken: int = 0
 
@@ -73,6 +74,8 @@ class PetrisEnvironment(PyEnvironment):
 
         self._collision_detected = False
 
+        self._down_reward = 0
+        
         self._down_reward = 0
         
     def collision_detected(self) -> bool:
@@ -182,6 +185,14 @@ class PetrisEnvironment(PyEnvironment):
         else:
             # Perform action, update state
             self.perform_action(action=action)
+
+            if State.full_line_no != self._current_num_lines:
+                reward = State.full_line_no * 100
+                self._current_num_lines = State.full_line_no
+                logger.info("Rewarded: %s", reward)
+            else:
+                reward =  0
+
             self._actions_taken += 1
             self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
             # Assign penalty if it has been placed

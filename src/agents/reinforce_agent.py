@@ -33,6 +33,8 @@ from src.custom_driver.petris_driver import PetrisDriver
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
+from src.checkpointer.checkpointer import create_checkpointer
+from src.policy_saver.policy_saver import TFPolicySaver
 
 logger = logging.getLogger(__name__) 
 
@@ -72,7 +74,8 @@ def create_replay_buffer(agent: reinforce_agent.ReinforceAgent, replay_buffer_le
 
     return replay_buffer, rb_observer
 
-def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_screen, clock, speed, epoch, iteration, agent):
+
+def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, main_screen, clock, speed, epoch, iteration, agent):
     driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
@@ -81,7 +84,7 @@ def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_
                 epsilon=parameters.epsilon
             ), use_tf_function=True
         ),
-        observers,
+        rb_observer,
         max_episodes=parameters.collect_num_episodes,
         agent=agent
     )
@@ -124,10 +127,7 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     # NOTE: .001 lr was the example used by the docs
     optimizer = tf.keras.optimizers.Adam(learning_rate=parameters.learning_rate)
-
-    # Keeps track 
-    train_step_counter = tf.Variable(0)
-
+    
     agent = reinforce_agent.ReinforceAgent(
         env.time_step_spec(),
         env.action_spec(),
@@ -141,16 +141,26 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     return agent
 
-def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: Parameters, metrics: Metrics, iteration: int = 0) -> DataFrame:
+def train_reinforce(main_screen: Surface, 
+                    clock: Clock, 
+                    speed: int, 
+                    parameters: Parameters, 
+                    metrics: Metrics, 
+                    iteration: int = 0) -> DataFrame:
     # init environment 
     petris_environment = PetrisEnvironment(parameters=parameters)
     train_enivronment = TFPyEnvironment(environment=petris_environment)
     eval_environment = TFPyEnvironment(environment=petris_environment)
 
+    num_iterations = parameters.iterations.num_iterations
     parameters = parameters.params.agent
 
+    global_step = tf.compat.v1.train.get_or_create_global_step()
+
     # Init the actor network, optimizer, and agent 
-    reinforce_agent = create_reinforce(env=train_enivronment, parameters=parameters)
+    reinforce_agent = create_reinforce(env=train_enivronment, 
+                                       parameters=parameters,
+                                       train_step_counter=global_step)
     logger.info("Agent Created")
 
     # TODO: THESE POLICIES ARE UNUSED, FIND CORRECT USE
@@ -167,6 +177,15 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
     # Reset the train step
     reinforce_agent.train_step_counter.assign(0)
 
+    checkpoint = create_checkpointer(name="reinforce", 
+                                     agent=reinforce_agent, 
+                                     replay_buffer=replay_buffer, 
+                                     global_step=global_step,
+                                     max_to_keep=num_iterations)
+    policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
+
+    checkpoint.initialize_or_restore()
+
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")
     
@@ -177,15 +196,15 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
     logger.info("Running for %s epochs", parameters.epochs)
 
     for i in range(parameters.epochs):
-        logger.info("Running Epoch: %s", i)
         avg_return = -1
         loss = 0.00
 
+        logger.info("Collecting Episode: %s", i)
         # Save episodes to the replay buffer
         collect_episode(
             petris_environment, 
             reinforce_agent.collect_policy, 
-            observers=[rb_observer,metrics.metrics_observer()], 
+            rb_observer=[rb_observer,metrics.metrics_observer()], 
             parameters=parameters, 
             main_screen=main_screen, 
             clock=clock, 
@@ -194,6 +213,8 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
             iteration=iteration, 
             agent="Reinforce"
         )
+        
+        logger.info("Gathering Trajectories")
         # Update the agent's network using the buffer data
         iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
         trajectories, _ = next(iterator)
@@ -201,6 +222,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
 
         replay_buffer.clear()
 
+        logger.info("Checking Step")
         # Keeps track of how many times the agent has been trained
         step = reinforce_agent.train_step_counter.numpy()
 
@@ -210,6 +232,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, parameters: 
             avg_return = compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, i, iteration, "Reinforce")
             logger.info('step = {0}: Average Return = {1}'.format(step, avg_return))
 
+        logger.info("Saving Dataframe")
         append = DataFrame(data=[[i+1,avg_return,loss,metrics.metrics_observer().lines_placed]], columns=['epoch','return','loss','lines_cleared'])
         output_data = concat([output_data,append], ignore_index=True)
     return output_data

@@ -168,6 +168,14 @@ logs/*
 .vscode/*
 
 # results
+results/*
+
+# Saved checkpoints and policies
+checkpoint/*
+policy/* 
 results/*/graphs/*
 results/*/output/*
 results/original/
+
+# Pycharm
+.idea/*
