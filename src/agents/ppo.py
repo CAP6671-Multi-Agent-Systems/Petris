@@ -79,17 +79,17 @@ def create_replay_buffer(agent: PPOAgent, replay_buffer_length: int = 10000):
 
     return replay_buffer, rb_observer
 
-def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, main_screen, clock, speed, epoch, iteration, agent):
+def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_screen, clock, speed, epoch, iteration, agent):
     driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
             epsilon_greedy_policy.EpsilonGreedyPolicy(
                 policy=policy,
-                epsilon=parameters.epsilon
+                epsilon=parameters['epsilon']
             ), use_tf_function=True
         ),
-        [rb_observer],
-        max_episodes=parameters.collect_num_episodes,
+        observers,
+        max_episodes=parameters['collect_num_episodes'],
         agent=agent
     )
     time_step = env.reset()
@@ -100,24 +100,24 @@ def create_ppo(env: TFPyEnvironment, parameters: Parameters) -> PPOAgent:
     actor_network = ActorDistributionRnnNetwork(
         input_tensor_spec=env.observation_spec(),
         output_tensor_spec=env.action_spec(),
-        lstm_size=tuple(int(x) for x in parameters.actor.ltsm_size),
-        input_fc_layer_params=tuple(int(x) for x in parameters.actor.input_layers),
-        output_fc_layer_params=tuple(int(x) for x in parameters.actor.output_layers),
-        activation_fn=parameters.actor.activation
+        lstm_size=tuple(int(x) for x in parameters['actor']['ltsm_size']),
+        input_fc_layer_params=tuple(int(x) for x in parameters['actor']['input_layers']),
+        output_fc_layer_params=tuple(int(x) for x in parameters['actor']['output_layers']),
+        activation_fn=parameters['actor']['activation']
     )
 
     value_network = ValueRnnNetwork(
         input_tensor_spec=env.observation_spec(),
-        lstm_size=tuple(int(x) for x in parameters.value.ltsm_size),
-        input_fc_layer_params=tuple(int(x) for x in parameters.value.input_layers),
-        output_fc_layer_params=tuple(int(x) for x in parameters.value.input_layers),
-        activation_fn=parameters.value.activation
+        lstm_size=tuple(int(x) for x in parameters['value']['ltsm_size']),
+        input_fc_layer_params=tuple(int(x) for x in parameters['value']['input_layers']),
+        output_fc_layer_params=tuple(int(x) for x in parameters['value']['output_layers']),
+        activation_fn=parameters['value']['activation']
     )
 
     agent = PPOAgent(
         env.time_step_spec(),
         env.action_spec(),
-        optimizer=keras.optimizers.Adam(learning_rate=parameters.learning_rate),
+        optimizer=keras.optimizers.Adam(learning_rate=parameters['learning_rate']),
         actor_net=actor_network,
         value_net=value_network,
         train_step_counter=train_step_counter
@@ -150,39 +150,72 @@ def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int
     avg_return = total_return / num_episodes
     return avg_return.numpy()[0]
 
-def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, iteration: int) -> None:
+def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, type: str, **inputs) -> None:
+    params = parameters
+    logger.info(parameters.params.agent['eval_interval'])
+    if type == "agent":
+        params.params.agent = {
+            'actor': {
+                "input_layers": tuple([int(inputs['actor_input_layer_0']),int(inputs['actor_input_layer_1'])]),
+                "output_layers": tuple([int(inputs['actor_output_layer_0']),int(inputs['actor_output_layer_1'])]),
+                "ltsm_size": tuple([int(inputs['actor_ltsm_size'])]),
+                "activation": "gelu" if int(inputs['actor_activation']) == 1 else "relu"
+            },
+            'value': {
+                "input_layers": tuple([int(inputs['value_input_layer_0']),int(inputs['value_input_layer_1'])]),
+                "output_layers": tuple([int(inputs['value_output_layer_0']),int(inputs['value_output_layer_1'])]),
+                "ltsm_size": tuple([int(inputs['value_ltsm_size'])]),
+                "activation": "gelu" if int(inputs['value_activation']) == 1 else "relu"
+            },
+            'learning_rate': inputs['learning_rate'],
+            'epochs': parameters.params.agent['epochs'],
+            'epsilon': inputs['epsilon'],
+            'num_eval_episodes': parameters.params.agent['num_eval_episodes'],
+            'eval_interval': parameters.params.agent['eval_interval'],
+            'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
+        }
+    elif type == "enviornment":
+        params.params.enviornment = {
+            'early_penalty': inputs['early_penalty'],
+            'holes_penalty': inputs['holes_penalty'],
+            'height_penalty': inputs['height_penalty'],
+            'game_over_penalty': inputs['game_over_penalty'],
+            'line_reward': [inputs['line_single_reward'],inputs['line_double_reward'],inputs['line_triple_reward'],inputs['line_tetris_reward']],
+            'block_placed_reward': inputs['block_placed_reward'],
+            'press_down_reward': inputs['press_down_reward']
+        }
 
-    env = PetrisEnvironment(parameters=parameters)
+    env = PetrisEnvironment(parameters=params)
     train_env = TFPyEnvironment(environment=env)
     eval_env = TFPyEnvironment(environment=env)
-    
-    num_iterations = parameters.iterations.num_iterations
-    result_parameters = parameters
-    parameters = parameters.params.agent
 
-    agent = create_ppo(train_env, parameters)
+    params = params.params.agent
+
+    agent = create_ppo(train_env, params)
 
     replay_buffer, rb_observer = create_replay_buffer(agent)
 
     iterater = iter(replay_buffer.as_dataset(sample_batch_size=1))
 
-    avg_return =  compute_avg_return(eval_env, agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "PPO")
+    avg_return =  compute_avg_return(eval_env, agent.policy, params['num_eval_episodes'], main_screen, clock, speed, 0, metrics._iteration, "PPO")
     loss = 0.00
     output_data = DataFrame(data=[[0,avg_return,loss,0]], columns=['epoch','return','loss','lines_cleared'])
 
-    for i in range(parameters.epochs):
-        logger.info(f'Episode {i}\n')
+    for i in range(params['epochs']):
+        logger.info("Running Epoch: %s", i)
+        avg_return = -1
+        loss = 0.00
 
         collect_episode(
             env, 
             agent.collect_policy, 
-            rb_observer=rb_observer, 
-            parameters=parameters, 
+            observers=[rb_observer,metrics.metrics_observer()], 
+            parameters=params, 
             main_screen=main_screen, 
             clock=clock, 
             speed=speed, 
             epoch=i, 
-            iteration=iteration, 
+            iteration=metrics._iteration, 
             agent="PPO"
         )
 
@@ -196,13 +229,16 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, 
         replay_buffer.clear()
 
         step = agent.train_step_counter.numpy()
-
+        logger.info(train_loss)
         loss = train_loss.loss.numpy()
 
-        if step % parameters.eval_interval == 0 and step != 0:
-            avg_return = compute_avg_return(eval_env, agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, i, iteration, "PPO")
+        if step % params['eval_interval'] == 0 and step != 0:
+            avg_return = compute_avg_return(eval_env, agent.policy, params['num_eval_episodes'], main_screen, clock, speed, i, metrics._iteration, "PPO")
             logger.info('Iteration = {} | Loss = {} | Average Return = {}'.format(i, loss, avg_return))
 
         append = DataFrame(data=[[i+1,avg_return,loss,metrics.metrics_observer().lines_placed]], columns=['epoch','return','loss','lines_cleared'])
         output_data = concat([output_data,append], ignore_index=True)
-    return output_data
+
+    metrics.finish_iteration(output_data)
+    returns = output_data[output_data['return'] != -1]
+    return returns['return'].mean()

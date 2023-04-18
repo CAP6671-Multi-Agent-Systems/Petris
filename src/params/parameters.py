@@ -17,25 +17,16 @@ class Parameters:
         sha256 = hashlib.sha256()
         with open(json_file_path, "r") as file:
             self.data = json.load(file, object_hook=NestedDict)
-            while True:
-                data = file.read(65536)
-                if not data:
-                    break
-                sha256.update(data)
-            
+        sha256.update(json.dumps(self.data).encode())
         self.hash = sha256.hexdigest()[:6]
         self.agent = self.data.agent
         self.params = self.data.params
-        self.iterations = self.data.iterations
+        self.bounds = self.data.bounds
+        self.to_maximize = self.data.to_maximize
 
         os.makedirs("./results/original", exist_ok=True)
         with open(f'./results/original/{self.hash}.json','w') as file:
-            file.write(json.dumps({
-                'agent': self.agent,
-                'hash': self.hash,
-                'params': self.params,
-                'iterations': self.iterations
-            }))
+            file.write(json.dumps(self.data))
         if os.path.exists(f'./results/original/{self.hash}.json'):
             logger.info("Copy of input file created successfully. Parameters Enabled!") 
         else:
@@ -58,7 +49,6 @@ class Parameters:
 
     def format_output(self) -> NestedDict:
         output = self.data
-        del output.iterations
         output.parent_hash = self.hash
         return output
     

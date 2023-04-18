@@ -81,11 +81,11 @@ def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, mai
         py_tf_eager_policy.PyTFEagerPolicy(
             epsilon_greedy_policy.EpsilonGreedyPolicy(
                 policy=policy,
-                epsilon=parameters.epsilon
+                epsilon=parameters['epsilon']
             ), use_tf_function=True
         ),
-        rb_observer,
-        max_episodes=parameters.collect_num_episodes,
+        observers,
+        max_episodes=parameters['collect_num_episodes'],
         agent=agent
     )
     initial_time_step = env.reset()
@@ -97,7 +97,7 @@ def compute_avg_return(env: TFPyEnvironment, policy, num_episodes, main_screen, 
     total_return = 0.0
 
     for _ in range(num_episodes):
-        pygame.display.set_caption(f"EVALUATION | {agent} | Iteration {iteration+1} | Epoch {epoch+1} | Episode {_+1}")
+        pygame.display.set_caption(f"EVALUATION | Iteration {iteration+1} | {agent} | Epoch {epoch+1} | Episode {_+1}")
         keyboard_events : List[Event] = []
         time_step = env.reset()
         episode_return = 0.0
@@ -117,17 +117,19 @@ def compute_avg_return(env: TFPyEnvironment, policy, num_episodes, main_screen, 
     return avg_return.numpy()[0]
 
 def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_agent.ReinforceAgent:
-    logger.info("Creating agent")
     # Actor network 
     actor_net = actor_distribution_network.ActorDistributionNetwork(
         env.observation_spec(),
         env.action_spec(),
-        fc_layer_params=tuple(int(x) for x in parameters.layers)
+        fc_layer_params=tuple(int(x) for x in parameters['layers'])
     )
 
     # NOTE: .001 lr was the example used by the docs
-    optimizer = tf.keras.optimizers.Adam(learning_rate=parameters.learning_rate)
-    
+    optimizer = tf.keras.optimizers.Adam(learning_rate=parameters['learning_rate'])
+
+    # Keeps track 
+    train_step_counter = tf.Variable(0)
+
     agent = reinforce_agent.ReinforceAgent(
         env.time_step_spec(),
         env.action_spec(),
@@ -141,32 +143,40 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     return agent
 
-def train_reinforce(main_screen: Surface, 
-                    clock: Clock, 
-                    speed: int, 
-                    parameters: Parameters, 
-                    metrics: Metrics, 
-                    iteration: int = 0) -> DataFrame:
-    # init environment 
-    petris_environment = PetrisEnvironment(parameters=parameters)
+def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, type: str,**inputs) -> DataFrame:
+    params = parameters
+    if type == "agent":
+        params.params.agent = {
+            'layers': tuple([int(inputs['layer_0']),int(inputs['layer_1'])]),
+            'learning_rate': inputs['learning_rate'],
+            'epochs': parameters.params.agent['epochs'],
+            'epsilon': inputs['epsilon'],
+            'num_eval_episodes': parameters.params.agent['num_eval_episodes'],
+            'eval_interval': parameters.params.agent['eval_interval'],
+            'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
+        }
+    elif type == "enviornment":
+        params.params.enviornment = {
+            'early_penalty': inputs['early_penalty'],
+            'holes_penalty': inputs['holes_penalty'],
+            'height_penalty': inputs['height_penalty'],
+            'game_over_penalty': inputs['game_over_penalty'],
+            'line_reward': [inputs['line_single_reward'],inputs['line_double_reward'],inputs['line_triple_reward'],inputs['line_tetris_reward']],
+            'block_placed_reward': inputs['block_placed_reward'],
+            'press_down_reward': inputs['press_down_reward']
+        }
+    
+    petris_environment = PetrisEnvironment(parameters=params)
     train_enivronment = TFPyEnvironment(environment=petris_environment)
     eval_environment = TFPyEnvironment(environment=petris_environment)
-
-    num_iterations = parameters.iterations.num_iterations
-    parameters = parameters.params.agent
+    
+    params = params.params.agent
 
     global_step = tf.compat.v1.train.get_or_create_global_step()
 
     # Init the actor network, optimizer, and agent 
-    reinforce_agent = create_reinforce(env=train_enivronment, 
-                                       parameters=parameters,
-                                       train_step_counter=global_step)
+    reinforce_agent = create_reinforce(env=train_enivronment, parameters=params)
     logger.info("Agent Created")
-
-    # TODO: THESE POLICIES ARE UNUSED, FIND CORRECT USE
-    # Policies
-    eval_policy = reinforce_agent.policy
-    collect_policy = reinforce_agent.collect_policy
 
     # Init Replay Buffer
     replay_buffer, rb_observer = create_replay_buffer(agent=reinforce_agent)
@@ -189,13 +199,14 @@ def train_reinforce(main_screen: Surface,
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")
     
-    avg_return =  compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "Reinforce")
+    avg_return =  compute_avg_return(eval_environment, reinforce_agent.policy, params['num_eval_episodes'], main_screen, clock, speed, 0, metrics._iteration, "Reinforce")
     loss = 0.00
     output_data = DataFrame(data=[[0,avg_return,loss,0]], columns=['epoch','return','loss','lines_cleared'])
 
-    logger.info("Running for %s epochs", parameters.epochs)
+    logger.info("Running for %s epochs", params['epochs'])
 
-    for i in range(parameters.epochs):
+    for i in range(params['epochs']):
+        logger.info("Running Epoch: %s", i)
         avg_return = -1
         loss = 0.00
 
@@ -204,13 +215,13 @@ def train_reinforce(main_screen: Surface,
         collect_episode(
             petris_environment, 
             reinforce_agent.collect_policy, 
-            rb_observer=[rb_observer,metrics.metrics_observer()], 
-            parameters=parameters, 
+            observers=[rb_observer,metrics.metrics_observer()], 
+            parameters=params, 
             main_screen=main_screen, 
             clock=clock, 
             speed=speed, 
-            epoch=i, 
-            iteration=iteration, 
+            epoch=i,  
+            iteration=metrics._iteration,
             agent="Reinforce"
         )
         
@@ -227,32 +238,14 @@ def train_reinforce(main_screen: Surface,
         step = reinforce_agent.train_step_counter.numpy()
 
         loss = train_loss.loss.numpy()
-
-        if step % parameters.eval_interval == 0 and step != 0:
-            avg_return = compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, i, iteration, "Reinforce")
-            logger.info('step = {0}: Average Return = {1}'.format(step, avg_return))
+        if step % params['eval_interval'] == 0 and step != 0:
+            avg_return = compute_avg_return(eval_environment, reinforce_agent.policy, params['num_eval_episodes'], main_screen, clock, speed, i, metrics._iteration, "Reinforce")
+            logger.info('step = {0} | Average Return = {1} | loss = {2}'.format(step, avg_return,loss))
 
         logger.info("Saving Dataframe")
         append = DataFrame(data=[[i+1,avg_return,loss,metrics.metrics_observer().lines_placed]], columns=['epoch','return','loss','lines_cleared'])
         output_data = concat([output_data,append], ignore_index=True)
-    return output_data
-
-def play_reinforce_agent(env: TFPyEnvironment, main_screen: Surface, clock: Clock, speed: int, num_episodes: int = 5) -> None:
-    """
-    Runs multiple episodes the game scene for the agent to run.
     
-    NOTE: Player an interfere the agent by pressing the keys.
-
-    Args:
-        env (PyEnvironment): _description_
-        main_screen (Surface): _description_
-        clock (Clock): _description_
-        speed (int): _description_
-    """
-    petris_environment = PetrisEnvironment()
-    environment = TFPyEnvironment(environment=petris_environment)
-
-    cumulative_reward = 0
-
-    agent: reinforce_agent.ReinforceAgent = create_reinforce(env=environment)
-    policy = agent.policy
+    metrics.finish_iteration(output_data)
+    returns = output_data[output_data['return'] != -1]
+    return returns['return'].mean()
