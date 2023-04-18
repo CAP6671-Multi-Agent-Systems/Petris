@@ -176,3 +176,6 @@ policy/*
 results/*/graphs/*
 results/*/output/*
 results/original/
+
+# Pycharm
+.idea/*
