@@ -119,8 +119,7 @@ def create_ppo(env: TFPyEnvironment, parameters: Parameters) -> PPOAgent:
         env.action_spec(),
         optimizer=keras.optimizers.Adam(learning_rate=parameters['learning_rate']),
         actor_net=actor_network,
-        value_net=value_network,
-        train_step_counter=train_step_counter
+        value_net=value_network
     )
 
     agent.initialize()
@@ -159,13 +158,13 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, 
                 "input_layers": tuple([int(inputs['actor_input_layer_0']),int(inputs['actor_input_layer_1'])]),
                 "output_layers": tuple([int(inputs['actor_output_layer_0']),int(inputs['actor_output_layer_1'])]),
                 "ltsm_size": tuple([int(inputs['actor_ltsm_size'])]),
-                "activation": "gelu" if int(inputs['actor_activation']) == 1 else "relu"
+                "activation": "gelu" if int(inputs['actor_activation']) < 0.5 else "relu"
             },
             'value': {
                 "input_layers": tuple([int(inputs['value_input_layer_0']),int(inputs['value_input_layer_1'])]),
                 "output_layers": tuple([int(inputs['value_output_layer_0']),int(inputs['value_output_layer_1'])]),
                 "ltsm_size": tuple([int(inputs['value_ltsm_size'])]),
-                "activation": "gelu" if int(inputs['value_activation']) == 1 else "relu"
+                "activation": "gelu" if int(inputs['value_activation']) < 0.5 else "relu"
             },
             'learning_rate': inputs['learning_rate'],
             'epochs': parameters.params.agent['epochs'],
@@ -229,7 +228,6 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, 
         replay_buffer.clear()
 
         step = agent.train_step_counter.numpy()
-        logger.info(train_loss)
         loss = train_loss.loss.numpy()
 
         if step % params['eval_interval'] == 0 and step != 0:

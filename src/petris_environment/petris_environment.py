@@ -194,18 +194,6 @@ class PetrisEnvironment(PyEnvironment):
         else:
             # Perform action, update state
             self.perform_action(action=action)
-<<<<<<< HEAD
-
-            if State.full_line_no != self._current_num_lines:
-                reward = State.full_line_no * 100
-                self._current_num_lines = State.full_line_no
-                logger.info("Rewarded: %s", reward)
-            else:
-                reward =  0
-
-            self._actions_taken += 1
-=======
->>>>>>> f29a528 (Optimizer implemented for Reinforce and PPO, but PPO's loss is not showing. lines cleared unsure if working, histogram working.)
             self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
             # Assign penalty if it has been placed
             penalty = 0

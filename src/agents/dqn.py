@@ -20,26 +20,27 @@ from tf_agents.policies import py_tf_eager_policy
 from tf_agents.policies import random_tf_policy
 from tf_agents.policies import epsilon_greedy_policy
 from tf_agents.replay_buffers import reverb_replay_buffer
+from tf_agents.policies.tf_policy import TFPolicy
 from tf_agents.replay_buffers import reverb_utils
 from tf_agents.trajectories import trajectory
 from tf_agents.specs import tensor_spec
 from tf_agents.utils import common
 from tf_agents.utils.common import function
-from tf_agents.drivers.dynamic_step_driver import DynamicStepDriver
 from src.params.parameters import Parameters
 
 import pygame
 import tensorflow as tf
 from tensorflow import keras
 from pygame.time import Clock
+from pandas import DataFrame,concat
 from pygame.surface import Surface
-from tf_agents.environments import utils
 from tf_agents.environments.tf_py_environment import TFPyEnvironment
 
 from src.scenes.scenes import GameScene, Scenes, TitleScene
 from src.game_runner.game_runner import render_active_scene
 from src.petris_environment.petris_environment import PetrisEnvironment
 from src.custom_driver.petris_driver import PetrisDriver
+from src.metrics.metrics import Metrics
 
 from src.checkpointer.checkpointer import create_checkpointer
 from src.policy_saver.policy_saver import TFPolicySaver
@@ -86,7 +87,7 @@ def create_replay_buffer(agent: dqn_agent.DdqnAgent, replay_buffer_length: int =
     return replay_buffer, rb_observer
 
 
-def create_dqn(env: TFPyEnvironment, train_step_counter: tf.Variable = tf.Variable(0)) -> dqn_agent.DqnAgent:
+def create_dqn(env: TFPyEnvironment, parameters, train_step_counter: tf.Tensor) -> dqn_agent.DqnAgent:
     """_summary_
 
     Args:
@@ -95,16 +96,16 @@ def create_dqn(env: TFPyEnvironment, train_step_counter: tf.Variable = tf.Variab
     Returns:
         dqn_agent.DqnAgent: _description_
     """
+    #investigate input_dim
+    logger.info(parameters)
     q_net = sequential.Sequential([
         keras.layers.Dense(
-            100, 
-            activation=keras.activations.relu, 
-            kernel_initializer=tf.keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
+            parameters['layer_0'], 
+            activation=keras.activations.relu if parameters['activation'] == 'relu' else keras.activations.gelu, 
         ),
         keras.layers.Dense(
-            50, 
-            activation=keras.activations.relu, 
-            kernel_initializer=tf.keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
+            parameters['layer_1'], 
+            activation=keras.activations.relu if parameters['activation'] == 'relu' else keras.activations.gelu, 
         ),
         tf.keras.layers.Flatten(), 
         keras.layers.Dense(4, activation="linear")
@@ -114,9 +115,10 @@ def create_dqn(env: TFPyEnvironment, train_step_counter: tf.Variable = tf.Variab
         env.time_step_spec(),
         env.action_spec(),
         q_network=q_net,
-        optimizer=keras.optimizers.Adam(learning_rate=0.2),
+        optimizer=keras.optimizers.Adam(learning_rate=parameters['learning_rate']),
         td_errors_loss_fn=common.element_wise_squared_loss,
-        train_step_counter=train_step_counter
+        train_step_counter=train_step_counter,
+        epsilon_greedy= parameters['epsilon']
     )
     
     agent.initialize()
@@ -130,10 +132,8 @@ def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_
     driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
-            epsilon_greedy_policy.EpsilonGreedyPolicy(
-                policy=policy,
-                epsilon=parameters['epsilon']
-            ), use_tf_function=True
+            policy, 
+            use_tf_function=True
         ),
         observers,
         max_episodes=parameters['collect_num_episodes'],
@@ -144,7 +144,7 @@ def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_
     driver.run(main_screen, clock, speed, epoch, iteration, time_step, policy_state)
 
 # Metrics and evaluation function
-def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int, main_screen: Surface, clock: Clock, speed: int, epoch: int, iteration: int, agent: PPOAgent) -> float:
+def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int, main_screen: Surface, clock: Clock, speed: int, epoch: int, iteration: int, agent: dqn_agent.DqnAgent) -> float:
     total_return = 0.0
 
     for _ in range(num_episodes):
@@ -167,134 +167,105 @@ def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int
     return avg_return.numpy()[0]
 
 
-def train_dqn(main_screen: Surface, clock: Clock, speed: int, parameters: Parameters, iteration: int = 0) -> None:
+def train_dqn(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters, type: str,**inputs) -> float:
     """Creates and Trains a DQN agent."""
+    logger.info(type)
+    params = parameters
+    if type == "agent":
+        params.params.agent = {
+            'layer_0': int(inputs['layer_0']),
+            'layer_1': int(inputs['layer_1']),
+            'learning_rate': inputs['learning_rate'],
+            'activation': "gelu" if int(inputs['activation']) < 0.5 else "relu",
+            'learning_rate': inputs['learning_rate'],
+            'epochs': parameters.params.agent['epochs'],
+            'epsilon': inputs['epsilon'],
+            'num_eval_episodes': parameters.params.agent['num_eval_episodes'],
+            'eval_interval': parameters.params.agent['eval_interval'],
+            'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
+            'save_interval': parameters.params.agent['save_interval']
+        }
+    elif type == "enviornment":
+        params.params.enviornment = {
+            'early_penalty': inputs['early_penalty'],
+            'holes_penalty': inputs['holes_penalty'],
+            'height_penalty': inputs['height_penalty'],
+            'game_over_penalty': inputs['game_over_penalty'],
+            'line_reward': [inputs['line_single_reward'],inputs['line_double_reward'],inputs['line_triple_reward'],inputs['line_tetris_reward']],
+            'block_placed_reward': inputs['block_placed_reward'],
+            'press_down_reward': inputs['press_down_reward']
+        }
 
-    petris_environment = PetrisEnvironment(parameters=parameters)
+    petris_environment = PetrisEnvironment(parameters=params)
     train_env = TFPyEnvironment(environment=petris_environment)
+    eval_env = TFPyEnvironment(environment=petris_environment)
 
-    num_iterations = parameters.iterations.num_iterations
-    parameters = parameters.params.agent
+    params = params.params.agent
 
     global_step = tf.compat.v1.train.get_or_create_global_step()
 
     # Set up agent 
-    agent = create_dqn(env=train_env, train_step_counter=global_step)
+    agent = create_dqn(env=train_env, parameters=params, train_step_counter=global_step)
 
     replay_buffer, rb_observer = create_replay_buffer(agent=agent)
+
+    iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
     
     agent.train = function(agent.train)
     agent.train_step_counter.assign(0)
 
-    checkpoint = create_checkpointer(name="dqn", 
-                                     agent=agent, 
-                                     replay_buffer=replay_buffer, 
-                                     global_step=global_step,
-                                     max_to_keep=num_iterations)
-    policy_saver = TFPolicySaver(name="dqn", agent=agent)
+    #checkpoint = create_checkpointer(name="dqn", agent=agent, replay_buffer=replay_buffer, global_step=global_step, max_to_keep=params['save_interval'])
+    #policy_saver = TFPolicySaver(name="dqn", agent=agent)
 
-    checkpoint.initialize_or_restore()
+    #checkpoint.initialize_or_restore()
 
     avg_return =  compute_avg_return(eval_env, agent.policy, params['num_eval_episodes'], main_screen, clock, speed, 0, metrics._iteration, "PPO")
     loss = 0.00
     output_data = DataFrame(data=[[0,avg_return,loss,0]], columns=['epoch','return','loss','lines_cleared'])
 
 
-    logger.info("Running for %s epochs", parameters.epochs)
+    logger.info("Running for %s epochs", params['epochs'])
 
-    for epoch in range(parameters.epochs):
+    for epoch in range(params['epochs']):
         logger.info("Running Episode: %s", epoch)
+        avg_return = -1
+        loss = 0.00
         
         collect_episode(
             petris_environment, 
             agent.collect_policy, 
-            rb_observer=rb_observer, 
-            parameters=parameters, 
+            observers=[rb_observer,metrics.metrics_observer()], 
+            parameters=params, 
             main_screen=main_screen, 
             clock=clock, 
             speed=speed, 
             epoch=epoch, 
-            iteration=iteration, 
+            iteration=metrics._iteration, 
             agent="DQN"
         )
 
-        logger.info("Collecting Episode Information")
-        iterator = iter(replay_buffer.as_dataset(sample_batch_size=1))
         trajectories, _ = next(iterator)
         trajectories = tf.nest.map_structure(lambda x: x[:, :2, ...], trajectories)
-        logger.info("We are here")
         train_loss = agent.train(experience=trajectories)
-        logger.info("Agent trained")
 
         replay_buffer.clear()
         step = agent.train_step_counter.numpy()
         
-        if step % parameters.log_interval == 0:
-            losses.append(train_loss.loss.numpy())
-            logger.info('step = {0}: loss = {1}'.format(step, train_loss.loss))
 
-        if step % parameters.save_interval == 0  and step != 0:
-            checkpoint.save(global_step=global_step)
-            policy_saver.save()
-        
-    
-    logger.info("Finishing Training...")
+        # if step % params['save_interval'] == 0  and step != 0:
+        #     checkpoint.save(global_step=global_step)
+        #     policy_saver.save()
 
+        loss = train_loss.loss.numpy()
 
-def play_dqn_agent(env: TFPyEnvironment, main_screen: Surface, clock: Clock, speed: int, num_episodes: int = 5) -> None:
-    """
-    Runs multiple episodes the game scene for the agent to run.
-    
-    NOTE: Player an interfere the agent by pressing the keys.
+        if step % params['eval_interval'] == 0 and step != 0:
+            avg_return = compute_avg_return(eval_env, agent.policy, params['num_eval_episodes'], main_screen, clock, speed, epoch, metrics._iteration, "PPO")
+            logger.info('Iteration = {} | Loss = {} | Average Return = {}'.format(epoch, loss, avg_return))
 
-    Args:
-        env (PyEnvironment): _description_
-        main_screen (Surface): _description_
-        clock (Clock): _description_
-        speed (int): _description_
-    """
+        append = DataFrame(data=[[epoch+1,avg_return,loss,metrics.metrics_observer().lines_placed]], columns=['epoch','return','loss','lines_cleared'])
+        output_data = concat([output_data,append], ignore_index=True)
 
-    cumulative_reward = 0
-    
-    agent: dqn_agent.DqnAgent = create_dqn(env=env)
-    policy = agent.policy
-
-
-    # Runs multiple games without quiting the pygame
-    for episode in range(1, num_episodes + 1):
-        logger.info("Starting Episode %s", episode)
-        
-        # Display episode
-        pygame.display.set_caption(f"Agent - Episode {episode}")
-        
-        time_step = env.reset()
-        
-        keyboard_events: List[Event] = []
-        while not time_step.is_last():
-            keyboard_events = pygame.event.get() 
-            Scenes.active_scene.process_input(events=keyboard_events)
-            
-            # Press escape to stop the entire game.            
-            for event in keyboard_events:
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    logger.info("Stopping Agent...")
-                    return
-            
-            render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
-            
-            # NOTE: At this point, we have already defined the environment
-            # in main() in petris.py 
-
-            # Validate our environment using a random policy for 5 eps
-            action = policy.action(time_step=time_step)
-            env.step(action=action)
-            cumulative_reward += time_step.reward
-            
-            # If it switches to the title scene that means the game episode is over.
-            # Recreate GameScene and run the next episode.
-            if isinstance(Scenes.active_scene, TitleScene):
-                logger.info("End of Episode %s", episode)
-                break
-    
-    logger.info("Cumulative Reward: %s", cumulative_reward)
+    metrics.finish_iteration(output_data)
+    returns = output_data[output_data['return'] != -1]
+    return returns['return'].mean()
     

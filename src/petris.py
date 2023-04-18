@@ -27,7 +27,7 @@ from src.params.parameters import Parameters, get_nested_value
 from src.petris_environment.petris_environment import PetrisEnvironment
 from src.game_runner.game_runner import play_game
 from src.agents.random_agent import play_random_agent
-from src.agents.dqn import play_dqn_agent, train_dqn
+from src.agents.dqn import train_dqn
 from src.agents.ppo import train_ppo
 from src.agents.reinforce_agent import train_reinforce
 from src.metrics.metrics import Metrics
@@ -83,17 +83,113 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
             metrics = Metrics(parameters=parameters)
             agent = parameters.agent
             opt_funct = None
-            train_results = None
             optimizer = None
 
             if agent and agent.lower() == "random":
                 play_random_agent(env=PetrisEnvironment(parameters=parameters), main_screen=main_screen, clock=clock, speed=speed, num_episodes=parameters.agent.epoch)
+
             elif agent and agent.lower() == "dqn":
-                tf_env = TFPyEnvironment(environment=PetrisEnvironment(parameters=parameters))
-                train_results = play_dqn_agent(env=tf_env, main_screen=main_screen, clock=clock, speed=speed)
+                logger.info("Training DQN")
+
+                opt_funct =  partial(train_dqn,main_screen=main_screen, clock=clock, speed=speed, metrics=metrics, parameters=parameters, type=parameters.to_maximize)
+
+                if parameters.to_maximize == "agent":
+                    layer_0 = tuple(int(x) for x in parameters.bounds.agent.layer_0)
+                    layer_1 = tuple(int(x) for x in parameters.bounds.agent.layer_1)
+                    activation = tuple(float(x) for x in parameters.bounds.agent.activation)
+                    learning_rate = tuple(float(x) for x in parameters.bounds.agent.learning_rate)
+                    epochs = tuple(int(x) for x in parameters.bounds.agent.epochs)
+                    epsilon = tuple(float(x) for x in parameters.bounds.agent.epsilon)
+                    optimizer = BayesianOptimization(
+                        f=opt_funct,
+                        pbounds = {
+                            'layer_0': layer_0,
+                            'layer_1': layer_1,
+                            'learning_rate': learning_rate,
+                            'activation': activation,
+                            'epochs': epochs,
+                            'epsilon': epsilon
+                        }
+                    )
+                elif parameters.to_maximize == "environment":
+                    early_penalty = tuple(int(x) for x in parameters.bounds.environment.early_penalty)
+                    holes_penalty = tuple(float(x) for x in parameters.bounds.environment.holes_penalty)
+                    height_penalty = tuple(float(x) for x in parameters.bounds.environment.height_penalty)
+                    game_over_penalty = tuple(int(x) for x in parameters.bounds.environment.game_over_penalty)
+                    line_single_reward = tuple(int(x) for x in parameters.bounds.environment.line_single_reward)
+                    line_double_reward = tuple(int(x) for x in parameters.bounds.environment.line_double_reward)
+                    line_triple_reward = tuple(int(x) for x in parameters.bounds.environment.line_triple_reward)
+                    line_tetris_reward = tuple(int(x) for x in parameters.bounds.environment.line_tetris_reward)
+                    block_placed_reward = tuple(float(x) for x in parameters.bounds.environment.block_placed_reward)
+                    press_down_reward =  tuple(float(x) for x in parameters.bounds.environment.press_down_reward)
+                    optimizer = BayesianOptimization(
+                        f=opt_funct,
+                        pbounds= {
+                            'early_penalty': early_penalty,
+                            'holes_penalty': holes_penalty,
+                            'height_penalty': height_penalty,
+                            'game_over_penalty': game_over_penalty,
+                            'line_single_reward': line_single_reward,
+                            'line_double_reward': line_double_reward,
+                            'line_triple_reward': line_triple_reward,
+                            'line_tetris_reward': line_tetris_reward,
+                            'block_placed_reward': block_placed_reward,
+                            'press_down_reward': press_down_reward
+                        }
+                    )
+                elif parameters.to_maximize == "all":
+                    layer_0 = tuple(int(x) for x in parameters.bounds.agent.layer_0)
+                    layer_1 = tuple(int(x) for x in parameters.bounds.agent.layer_1)
+                    learning_rate = tuple(float(x) for x in parameters.bounds.agent.learning_rate)
+                    epochs = tuple(int(x) for x in parameters.bounds.agent.epochs)
+                    epsilon = tuple(float(x) for x in parameters.bounds.agent.epsilon)
+                    early_penalty = tuple(int(x) for x in parameters.bounds.environment.early_penalty)
+                    holes_penalty = tuple(float(x) for x in parameters.bounds.environment.holes_penalty)
+                    height_penalty = tuple(float(x) for x in parameters.bounds.environment.height_penalty)
+                    game_over_penalty = tuple(int(x) for x in parameters.bounds.environment.game_over_penalty)
+                    line_single_reward = tuple(int(x) for x in parameters.bounds.environment.line_single_reward)
+                    line_double_reward = tuple(int(x) for x in parameters.bounds.environment.line_double_reward)
+                    line_triple_reward = tuple(int(x) for x in parameters.bounds.environment.line_triple_reward)
+                    line_tetris_reward = tuple(int(x) for x in parameters.bounds.environment.line_tetris_reward)
+                    block_placed_reward = tuple(float(x) for x in parameters.bounds.environment.block_placed_reward)
+                    press_down_reward =  tuple(float(x) for x in parameters.bounds.environment.press_down_reward)
+                    optimizer = BayesianOptimization(
+                        f=opt_funct,
+                        pbounds= {
+                            'layer_0': layer_0,
+                            'layer_1': layer_1,
+                            'learning_rate': learning_rate,
+                            'epochs': epochs,
+                            'epsilon': epsilon,
+                            'early_penalty': early_penalty,
+                            'holes_penalty': holes_penalty,
+                            'height_penalty': height_penalty,
+                            'game_over_penalty': game_over_penalty,
+                            'line_single_reward': line_single_reward,
+                            'line_double_reward': line_double_reward,
+                            'line_triple_reward': line_triple_reward,
+                            'line_tetris_reward': line_tetris_reward,
+                            'block_placed_reward': block_placed_reward,
+                            'press_down_reward': press_down_reward
+                        }
+                    )
+                elif parameters.to_maximize == "none":
+                    logger.info("Manual testing activated")
+                    result = opt_funct()
+                    logger.info(f'Manual testing finished, average result: {result:.2f}')
+
+                if(parameters.to_maximize != "none"):
+                    optimizer.maximize(
+                        init_points=rand_iter,
+                        n_iter=iter
+                    )
+                    logger.info(optimizer.res)
+
             elif agent and agent.lower() == "reinforce":
                 logger.info("Training Reinforce")
+
                 opt_funct =  partial(train_reinforce,main_screen=main_screen, clock=clock, speed=speed, metrics=metrics, parameters=parameters, type=parameters.to_maximize)
+
                 if parameters.to_maximize == "agent":
                     layer_0 = tuple(int(x) for x in parameters.bounds.agent.layer_0)
                     layer_1 = tuple(int(x) for x in parameters.bounds.agent.layer_1)
@@ -115,7 +211,6 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         n_iter=5
                     )
                     logger.info(optimizer.max)
-
                 elif parameters.to_maximize == "environment":
                     early_penalty = tuple(int(x) for x in parameters.bounds.environment.early_penalty)
                     holes_penalty = tuple(float(x) for x in parameters.bounds.environment.holes_penalty)
@@ -192,7 +287,9 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
 
             elif agent and agent.lower() == "ppo":
                 logger.info("Training PPO")
+
                 opt_funct = partial(train_ppo,main_screen=main_screen, clock=clock, speed=speed, parameters=parameters, metrics=metrics, type=parameters.to_maximize)
+
                 if parameters.to_maximize == "agent":
                     actor_input_layer_0 = tuple(int(x) for x in parameters.bounds.agent.actor.input_layer_0)
                     actor_input_layer_1 = tuple(int(x) for x in parameters.bounds.agent.actor.input_layer_1)
@@ -234,7 +331,6 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         n_iter=40
                     )
                     logger.info(optimizer.max)
-
                 elif parameters.to_maximize == "environment":
                     early_penalty = tuple(int(x) for x in parameters.bounds.environment.early_penalty)
                     holes_penalty = tuple(float(x) for x in parameters.bounds.environment.holes_penalty)
