@@ -62,13 +62,11 @@ class PetrisEnvironment(PyEnvironment):
 
         self._current_num_lines = State.full_line_no
         # Number of actions that has been taken. Used to set a hard stop for the game ()
-        self._actions_taken: int = 0
+        self._blocks_placed: int = 0
 
         self._prev_lines_cleared = 0
 
         self._parameters = parameters.params.environment
-
-        self._max_actions = self._parameters.max_actions
 
         self._total_reward = 0
 
@@ -159,7 +157,7 @@ class PetrisEnvironment(PyEnvironment):
         Scenes.active_scene = self._game_scene
         self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
         self._episode_ended = False
-        self._actions_taken = 0
+        self._blocks_placed = 0
         self._prev_lines_cleared = 0
         self._total_reward = 0
         self._point_collected = False
@@ -179,12 +177,15 @@ class PetrisEnvironment(PyEnvironment):
             return self.reset()
         if self._game_scene.game_over:
             self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
-            logger.info(f"Episode Ended. Reward given: {self._total_reward - self._parameters.game_over_penalty}")
+            penalty = -self._parameters.game_over_penalty * (self._parameters.early_penalty - self._blocks_placed) if self._parameters.early_penalty > self._blocks_placed else 0
+            #penalty = -self._parameters.game_over_penalty
+            logger.info(f"Episode Ended. Penalty given: {penalty} | Total reward given: {self._total_reward + penalty}")
             self._episode_ended = True
-            return ts.termination(np.array([self._state], dtype=np.int32), reward= -self._parameters.game_over_penalty)
+            return ts.termination(np.array([self._state], dtype=np.int32), reward= penalty)
         else:
             # Perform action, update state
             self.perform_action(action=action)
+<<<<<<< HEAD
 
             if State.full_line_no != self._current_num_lines:
                 reward = State.full_line_no * 100
@@ -194,11 +195,14 @@ class PetrisEnvironment(PyEnvironment):
                 reward =  0
 
             self._actions_taken += 1
+=======
+>>>>>>> f29a528 (Optimizer implemented for Reinforce and PPO, but PPO's loss is not showing. lines cleared unsure if working, histogram working.)
             self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
             # Assign penalty if it has been placed
             penalty = 0
             reward = 0
             if (self._game_scene.collision and not self._collision_detected):
+                self._blocks_placed += 1
                 penalty = self.penalize_holes(np.array(self._game_scene.tetris_map)) + self.penalize_height_differences(np.array(self._game_scene.tetris_map))
                 self._collision_detected = True
                 self._game_scene.collision = False

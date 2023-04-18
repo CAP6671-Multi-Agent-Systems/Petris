@@ -28,13 +28,11 @@ from tf_agents.utils.common import function
 from tf_agents.drivers.dynamic_step_driver import DynamicStepDriver
 from src.params.parameters import Parameters
 
-
 import pygame
 import tensorflow as tf
 from tensorflow import keras
 from pygame.time import Clock
 from pygame.surface import Surface
-from pygame.event import Event
 from tf_agents.environments import utils
 from tf_agents.environments.tf_py_environment import TFPyEnvironment
 
@@ -128,68 +126,48 @@ def create_dqn(env: TFPyEnvironment, train_step_counter: tf.Variable = tf.Variab
     return agent
 
 
-def collect_episode(env: PetrisEnvironment, 
-                    policy, 
-                    rb_observer, 
-                    parameters, 
-                    main_screen, 
-                    clock, 
-                    speed, 
-                    epoch, 
-                    iteration, 
-                    agent):
+def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_screen, clock, speed, epoch, iteration, agent):
     driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
-            policy, 
-            use_tf_function=True
+            epsilon_greedy_policy.EpsilonGreedyPolicy(
+                policy=policy,
+                epsilon=parameters['epsilon']
+            ), use_tf_function=True
         ),
-        [rb_observer],
-        max_episodes=parameters.collect_num_episodes,
+        observers,
+        max_episodes=parameters['collect_num_episodes'],
         agent=agent
     )
-    initial_time_step = env.reset()
-    driver.run(main_screen, clock, speed, epoch, iteration, initial_time_step)
+    time_step = env.reset()
+    policy_state = policy.get_initial_state(batch_size=1)
+    driver.run(main_screen, clock, speed, epoch, iteration, time_step, policy_state)
 
-# # Metrics and evaluation function
-# def compute_avg_return(env: TFPyEnvironment, 
-#                        policy, 
-#                        num_episodes, 
-#                        main_screen, 
-#                        clock, 
-#                        speed, 
-#                        epoch, 
-#                        iteration, 
-#                        agent):
+# Metrics and evaluation function
+def compute_avg_return(env: TFPyEnvironment, policy: TFPolicy, num_episodes: int, main_screen: Surface, clock: Clock, speed: int, epoch: int, iteration: int, agent: PPOAgent) -> float:
+    total_return = 0.0
 
-#     total_return = 0.0
+    for _ in range(num_episodes):
+        pygame.display.set_caption(f"EVALUATION | {agent} | Iteration {iteration+1} | Epoch {epoch+1} | Episode {_+1}")
+        keyboard_events : List[Event] = []
+        time_step = env.reset()
+        episode_return = 0.0
+        policy_state = policy.get_initial_state(env.batch_size)
 
-#     for _ in range(num_episodes):
-#         pygame.display.set_caption(f"EVALUATION | {agent} | Iteration {iteration+1} | Epoch {epoch+1} | Episode {_+1}")
-#         keyboard_events : List[Event] = []
-#         time_step = env.reset()
-#         episode_return = 0.0
+        while not time_step.is_last():
+            Scenes.active_scene.process_input(events=keyboard_events)
+            keyboard_events = pygame.event.get()
+            action_step = policy.action(time_step=time_step,policy_state=policy_state)
+            time_step = env.step(action_step.action)
+            episode_return += time_step.reward
+            render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
+        total_return += episode_return
 
-#         while not time_step.is_last():
-#             Scenes.active_scene.process_input(events=keyboard_events)
-#             keyboard_events = pygame.event.get()
-
-#             action_step = policy.action(time_step)
-#             #logger.info("Manual steps (avg return)")
-#             time_step = env.step(action_step.action)
-#             episode_return += time_step.reward
-#             render_active_scene(main_screen=main_screen, clock=clock, speed=speed)
-#         total_return += episode_return
-
-#     avg_return = total_return / num_episodes
-#     return avg_return.numpy()[0]
+    avg_return = total_return / num_episodes
+    return avg_return.numpy()[0]
 
 
-def train_dqn(main_screen: Surface,
-              clock: Clock,
-              speed: int, 
-              parameters: Parameters, 
-              iteration: int = 0) -> None:
+def train_dqn(main_screen: Surface, clock: Clock, speed: int, parameters: Parameters, iteration: int = 0) -> None:
     """Creates and Trains a DQN agent."""
 
     petris_environment = PetrisEnvironment(parameters=parameters)
@@ -217,9 +195,10 @@ def train_dqn(main_screen: Surface,
 
     checkpoint.initialize_or_restore()
 
-    avg_return =  0#compute_avg_return(eval_environment, reinforce_agent.policy, parameters.num_eval_episodes, main_screen, clock, speed, 0, iteration, "Reinforce")
-    returns = [avg_return]
-    losses = [0.00]
+    avg_return =  compute_avg_return(eval_env, agent.policy, params['num_eval_episodes'], main_screen, clock, speed, 0, metrics._iteration, "PPO")
+    loss = 0.00
+    output_data = DataFrame(data=[[0,avg_return,loss,0]], columns=['epoch','return','loss','lines_cleared'])
+
 
     logger.info("Running for %s epochs", parameters.epochs)
 

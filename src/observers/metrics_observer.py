@@ -8,7 +8,7 @@ class MetricsObserver:
     def __init__(self):
         self.tetris_heatmap = np.zeros((20, 10), dtype=int)
         self.total_placements = 0
-        self.lines_placed = -1
+        self.lines_placed = 0
 
     def __call__(self, trajectory: Trajectory, collision_detected: bool = False) -> None:
         if collision_detected:
