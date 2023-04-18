@@ -75,7 +75,7 @@ def create_replay_buffer(agent: reinforce_agent.ReinforceAgent, replay_buffer_le
     return replay_buffer, rb_observer
 
 
-def collect_episode(env: PetrisEnvironment, policy, rb_observer, parameters, main_screen, clock, speed, epoch, iteration, agent):
+def collect_episode(env: PetrisEnvironment, policy, observers, parameters, main_screen, clock, speed, epoch, iteration, agent):
     driver = PetrisDriver(
         env, 
         py_tf_eager_policy.PyTFEagerPolicy(
@@ -116,7 +116,7 @@ def compute_avg_return(env: TFPyEnvironment, policy, num_episodes, main_screen, 
     avg_return = total_return / num_episodes
     return avg_return.numpy()[0]
 
-def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_agent.ReinforceAgent:
+def create_reinforce(env: TFPyEnvironment, parameters: Parameters, train_step_counter: tf.Tensor) -> reinforce_agent.ReinforceAgent:
     # Actor network 
     actor_net = actor_distribution_network.ActorDistributionNetwork(
         env.observation_spec(),
@@ -143,7 +143,7 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters) -> reinforce_
 
     return agent
 
-def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, type: str,**inputs) -> DataFrame:
+def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, type: str,**inputs) -> float:
     params = parameters
     if type == "agent":
         params.params.agent = {
@@ -165,6 +165,25 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
             'block_placed_reward': inputs['block_placed_reward'],
             'press_down_reward': inputs['press_down_reward']
         }
+    elif type == "all":
+        params.params.agent = {
+            'layers': tuple([int(inputs['layer_0']),int(inputs['layer_1'])]),
+            'learning_rate': inputs['learning_rate'],
+            'epochs': parameters.params.agent['epochs'],
+            'epsilon': inputs['epsilon'],
+            'num_eval_episodes': parameters.params.agent['num_eval_episodes'],
+            'eval_interval': parameters.params.agent['eval_interval'],
+            'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
+        }
+        params.params.enviornment = {
+            'early_penalty': inputs['early_penalty'],
+            'holes_penalty': inputs['holes_penalty'],
+            'height_penalty': inputs['height_penalty'],
+            'game_over_penalty': inputs['game_over_penalty'],
+            'line_reward': [inputs['line_single_reward'],inputs['line_double_reward'],inputs['line_triple_reward'],inputs['line_tetris_reward']],
+            'block_placed_reward': inputs['block_placed_reward'],
+            'press_down_reward': inputs['press_down_reward']
+        }
     
     petris_environment = PetrisEnvironment(parameters=params)
     train_enivronment = TFPyEnvironment(environment=petris_environment)
@@ -175,7 +194,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
     global_step = tf.compat.v1.train.get_or_create_global_step()
 
     # Init the actor network, optimizer, and agent 
-    reinforce_agent = create_reinforce(env=train_enivronment, parameters=params)
+    reinforce_agent = create_reinforce(env=train_enivronment, parameters=params, train_step_counter=global_step)
     logger.info("Agent Created")
 
     # Init Replay Buffer
@@ -191,7 +210,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
                                      agent=reinforce_agent, 
                                      replay_buffer=replay_buffer, 
                                      global_step=global_step,
-                                     max_to_keep=num_iterations)
+                                     max_to_keep=10)
     policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
 
     checkpoint.initialize_or_restore()
