@@ -40,7 +40,7 @@ class Metrics():
         self._generate_loss_plot()
         self._metrics_observer.reset()
 
-    def finish_training(self,results) -> None:
+    def finish_training(self,results = None) -> None:
         self._save_results(results)
         self._generate_histogram()
         self._generate_lines_plot()
@@ -137,10 +137,11 @@ class Metrics():
         ggsave(lines_cleared_plot, f'./results/{self._parameters.agent}/graphs/lines/{self._parameters.hash}/{self._iteration}.png')
 
 
-    def _save_results(self,results) -> None:
+    def _save_results(self,results = None) -> None:
         os.makedirs(f"./results/{self._parameters.agent}/output/", exist_ok=True)
         output = self._parameters.format_output()
-        output.results = results
+        if results != None:
+            output.results = results 
         df_data = []
         for df in self._training_results_collection:
             df_data.append(json.loads(df.to_json(orient='records')))

@@ -184,6 +184,9 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         n_iter=iter
                     )
                     logger.info(optimizer.res)
+                    metrics.finish_training(optimizer.res)
+                else:
+                    metrics.finish_training()
 
             elif agent and agent.lower() == "reinforce":
                 logger.info("Training Reinforce")
@@ -284,6 +287,9 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         n_iter=iter
                     )
                     logger.info(optimizer.res)
+                    metrics.finish_training(optimizer.res)
+                else:
+                    metrics.finish_training()
 
             elif agent and agent.lower() == "ppo":
                 logger.info("Training PPO")
@@ -433,8 +439,10 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         n_iter=iter
                     )
                     logger.info(optimizer.res)
+                    metrics.finish_training(optimizer.res)
+                else:
+                    metrics.finish_training()
 
-            metrics.finish_training(optimizer.res)
         else:
             logger.info('No parameters found, playing game instead')
             play_game(main_screen=main_screen, clock=clock, speed=speed)

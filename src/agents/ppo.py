@@ -183,6 +183,36 @@ def train_ppo(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, 
             'block_placed_reward': inputs['block_placed_reward'],
             'press_down_reward': inputs['press_down_reward']
         }
+    elif type == "all":
+        params.params.agent = {
+            'actor': {
+                "input_layers": tuple([int(inputs['actor_input_layer_0']),int(inputs['actor_input_layer_1'])]),
+                "output_layers": tuple([int(inputs['actor_output_layer_0']),int(inputs['actor_output_layer_1'])]),
+                "ltsm_size": tuple([int(inputs['actor_ltsm_size'])]),
+                "activation": "gelu" if int(inputs['actor_activation']) < 0.5 else "relu"
+            },
+            'value': {
+                "input_layers": tuple([int(inputs['value_input_layer_0']),int(inputs['value_input_layer_1'])]),
+                "output_layers": tuple([int(inputs['value_output_layer_0']),int(inputs['value_output_layer_1'])]),
+                "ltsm_size": tuple([int(inputs['value_ltsm_size'])]),
+                "activation": "gelu" if int(inputs['value_activation']) < 0.5 else "relu"
+            },
+            'learning_rate': inputs['learning_rate'],
+            'epochs': parameters.params.agent['epochs'],
+            'epsilon': inputs['epsilon'],
+            'num_eval_episodes': parameters.params.agent['num_eval_episodes'],
+            'eval_interval': parameters.params.agent['eval_interval'],
+            'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
+        }
+        params.params.enviornment = {
+            'early_penalty': inputs['early_penalty'],
+            'holes_penalty': inputs['holes_penalty'],
+            'height_penalty': inputs['height_penalty'],
+            'game_over_penalty': inputs['game_over_penalty'],
+            'line_reward': [inputs['line_single_reward'],inputs['line_double_reward'],inputs['line_triple_reward'],inputs['line_tetris_reward']],
+            'block_placed_reward': inputs['block_placed_reward'],
+            'press_down_reward': inputs['press_down_reward']
+        }
 
     env = PetrisEnvironment(parameters=params)
     train_env = TFPyEnvironment(environment=env)
