@@ -30,8 +30,17 @@ from tf_agents.trajectories.time_step import TimeStep
 
 from src.params.parameters import Parameters
 from src.scenes.scenes import GameScene, State, Scenes
-from src.keyboard_controller.keyboard_controller import (move_down, move_left, 
-                                                         move_right, rotate, Action)
+
+from enum import IntEnum
+
+from pynput.keyboard import Key, Controller
+
+
+class Action(IntEnum):
+    MOVE_DOWN = 0
+    MOVE_RIGHT = 1
+    MOVE_LEFT = 2
+    ROTATE = 3
 
 logger = logging.getLogger(__name__)
 
@@ -96,13 +105,13 @@ class PetrisEnvironment(PyEnvironment):
         """
 
         if action == Action.MOVE_DOWN:
-            move_down()
+            self._game_scene.move_down()
         elif action == Action.MOVE_RIGHT:
-            move_right()
+            self._game_scene.move_right()
         elif action == Action.MOVE_LEFT:
-            move_left()
+            self._game_scene.move_left()
         elif action == Action.ROTATE:
-            rotate()
+            self._game_scene.rotate()
 
         # Update the state after action
         self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
