@@ -5,9 +5,6 @@ plotnine
 numpy==1.23.1
 tf-agents[reverb]
 matplotlib
-<<<<<<< HEAD
 pandas
 plotnine
-=======
 bayesian-optimization
->>>>>>> f29a528 (Optimizer implemented for Reinforce and PPO, but PPO's loss is not showing. lines cleared unsure if working, histogram working.)
