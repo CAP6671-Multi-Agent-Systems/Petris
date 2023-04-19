@@ -138,6 +138,7 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                         }
                     )
                 elif parameters.to_maximize == "all":
+                    activation = tuple(float(x) for x in parameters.bounds.agent.activation)
                     layer_0 = tuple(int(x) for x in parameters.bounds.agent.layer_0)
                     layer_1 = tuple(int(x) for x in parameters.bounds.agent.layer_1)
                     learning_rate = tuple(float(x) for x in parameters.bounds.agent.learning_rate)
@@ -156,6 +157,7 @@ def main(speed: int, paramFile: Optional[str] = None ,rand_iter: int = 5, iter: 
                     optimizer = BayesianOptimization(
                         f=opt_funct,
                         pbounds= {
+                            'activation': activation,
                             'layer_0': layer_0,
                             'layer_1': layer_1,
                             'learning_rate': learning_rate,
