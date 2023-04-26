@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 class PetrisEnvironment(PyEnvironment):
     """Custom python environment for TF Agents. Extends PyEnvironment"""
-    def __init__(self, parameters: Parameters):
+    def __init__(self, parameters):
         super().__init__()
         self._game_scene: GameScene = GameScene()
         
@@ -75,11 +75,13 @@ class PetrisEnvironment(PyEnvironment):
 
         self._prev_lines_cleared = 0
 
-        self._parameters = parameters.params.environment
+        self._parameters = parameters['params']['enviornment']
 
         self._total_reward = 0
 
         self._collision_detected = False
+
+        self._block_placed = None
 
         self._down_reward = 0
         
@@ -87,6 +89,9 @@ class PetrisEnvironment(PyEnvironment):
         
     def collision_detected(self) -> bool:
         return self._collision_detected
+    
+    def block_placed(self) -> int:
+        return self._block_placed
 
     def action_spec(self) -> BoundedArraySpec:
         return self._action_spec
@@ -127,7 +132,7 @@ class PetrisEnvironment(PyEnvironment):
 
     def penalize_holes(self, tetris_map: np.ndarray) -> float:
         num_holes = self.count_holes(tetris_map)
-        penalty = -1 * num_holes * self._parameters.holes_penalty
+        penalty = -1 * num_holes * self._parameters['holes_penalty']
         return penalty
 
     def max_height(self, tetris_col: np.ndarray) -> int:
@@ -144,13 +149,13 @@ class PetrisEnvironment(PyEnvironment):
 
     def penalize_height_differences(self, tetris_map: np.ndarray) -> float:
         height_diffs = self.height_differences(tetris_map)
-        penalty = -1 * height_diffs * self._parameters.height_penalty
+        penalty = -1 * height_diffs * self._parameters['height_penalty']
         return penalty
     
     def reward_line_clear(self) -> float:
         num_lines = State.full_line_no - self._prev_lines_cleared
         self._prev_lines_cleared += num_lines
-        return self._parameters.line_reward[num_lines-1]
+        return self._parameters['line_reward'][num_lines-1]
 
     def _reset(self) -> TimeStep:
         """
@@ -171,6 +176,8 @@ class PetrisEnvironment(PyEnvironment):
         self._total_reward = 0
         self._point_collected = False
         self._down_reward = 0
+        self._block_placed = None
+
         
         return ts.restart(np.array([self._state], dtype=np.int32))
 
@@ -186,9 +193,9 @@ class PetrisEnvironment(PyEnvironment):
             return self.reset()
         if self._game_scene.game_over:
             self._state = np.squeeze(np.array(self._game_scene.tetris_map).flatten().tolist())
-            penalty = -self._parameters.game_over_penalty * (self._parameters.early_penalty - self._blocks_placed) if self._parameters.early_penalty > self._blocks_placed else 0
+            penalty = -self._parameters['game_over_penalty'] * (self._parameters['early_penalty'] - self._blocks_placed) if self._parameters['early_penalty'] > self._blocks_placed else 0
             #penalty = -self._parameters.game_over_penalty
-            logger.info(f"Episode Ended. Penalty given: {penalty} | Total reward given: {self._total_reward + penalty}")
+            logger.info(f"Episode Ended. Penalty given: {penalty:.2f} | Total reward given: {(self._total_reward + penalty):.2f}")
             self._episode_ended = True
             return ts.termination(np.array([self._state], dtype=np.int32), reward= penalty)
         else:
@@ -202,25 +209,30 @@ class PetrisEnvironment(PyEnvironment):
                 self._blocks_placed += 1
                 penalty = self.penalize_holes(np.array(self._game_scene.tetris_map)) + self.penalize_height_differences(np.array(self._game_scene.tetris_map))
                 self._collision_detected = True
+                self._block_placed = self._game_scene.block_placed
                 self._game_scene.collision = False
             elif(not self._game_scene.collision):
                 self._collision_detected = False
 
             if(self._prev_lines_cleared != State.full_line_no):
+                # Give reward for clearing a line
                 reward = self.reward_line_clear()
-                logger.info('given line')
             else: 
                 if action == Action.MOVE_DOWN and not self._game_scene.is_block_finished():
-                    reward = self._parameters.block_placed_reward + self._parameters.press_down_reward if self._collision_detected else self._parameters.press_down_reward
-                    self._down_reward += self._parameters.press_down_reward
+                    # If pressing down and have NOT reached the top, give reward
+                    reward = self._parameters['block_placed_reward'] + self._parameters['press_down_reward'] if self._collision_detected else self._parameters['press_down_reward']
+                    self._down_reward += self._parameters['press_down_reward']
                 else:
-                    reward = self._parameters.block_placed_reward if self._collision_detected else 0
+                    reward = self._parameters['block_placed_reward'] if self._collision_detected else 0
+
             self._total_reward += reward + penalty
+
             if self._collision_detected:
                 if action == Action.MOVE_DOWN and not self._game_scene.is_block_finished():
-                    logger.info(f'Reward Given:({reward-self._parameters.press_down_reward} + {self._down_reward:.2f} + {penalty:.2f}) = {(reward-self._parameters.press_down_reward) + self._down_reward + penalty:.2f} | Total reward : {self._total_reward:.2f}')
+                    logger.info(f'Reward Given: ({(reward):.2f} + {penalty:.2f}) = {(reward + penalty):.2f} | Down reward: {self._down_reward:.2f} | Total reward : {self._total_reward:.2f}')
+                    #logger.info(f'Reward Given: ({(reward- self._parameters["press_down_reward"]):.2f} + {self._down_reward:.2f} + {penalty:.2f}) = {(reward-self._parameters["press_down_reward"] + self._down_reward + penalty):.2f} | Total reward : {self._total_reward:.2f}')
                 else:
-                    logger.info(f'Reward Given:({reward} + {self._down_reward:.2f} + {penalty:.2f}) = {reward + penalty:.2f} | Total reward : {self._total_reward:.2f}')
+                    logger.info(f'Reward Given: ({reward:.2f} + {penalty:.2f}) = {reward + penalty:.2f} | Down reward: {self._down_reward:.2f} | Total reward : {self._total_reward:.2f}')
                 self._down_reward = 0
             return ts.transition(np.array([self._state], dtype=np.int32), reward= reward + penalty, discount=0.95)
             # NOTE: We are wrapping it in [] to maintain the (1, 200) 

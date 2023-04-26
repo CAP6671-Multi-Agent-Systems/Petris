@@ -32,7 +32,6 @@ from tf_agents.replay_buffers import reverb_replay_buffer
 from tf_agents.replay_buffers import reverb_utils
 
 from src.params.parameters import Parameters
-from src.metrics.save_metrics import plot_one, save_json
 from src.custom_driver.petris_driver import PetrisDriver
 from src.metrics.metrics import Metrics
 from src.petris_environment.petris_environment import PetrisEnvironment

@@ -96,7 +96,7 @@ class PetrisDriver(driver.Driver):
       for observer in self.observers:
         observer_signature = inspect.signature(observer)
         if "collision_detected" in observer_signature.parameters:
-            observer(traj, collision_detected=self.env._collision_detected)
+            observer(traj, collision_detected=self.env._collision_detected, block_placed=self.env._block_placed)
         else:
             observer(traj)
 
