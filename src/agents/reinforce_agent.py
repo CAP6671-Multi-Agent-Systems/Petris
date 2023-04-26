@@ -27,7 +27,6 @@ from tf_agents.specs import tensor_spec
 from tf_agents.utils import common
 
 from src.params.parameters import Parameters
-from src.metrics.save_metrics import plot_one, save_json
 from src.metrics.metrics import Metrics
 from src.custom_driver.petris_driver import PetrisDriver
 from src.scenes.scenes import GameScene, Scenes, TitleScene
@@ -144,9 +143,11 @@ def create_reinforce(env: TFPyEnvironment, parameters: Parameters, train_step_co
     return agent
 
 def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Metrics, parameters: Parameters, type: str,**inputs) -> float:
-    params = parameters
+    params = {
+        'params': {}
+    }
     if type == "agent":
-        params.params.agent = {
+        params['params']['agent'] = {
             'layers': tuple([int(inputs['layer_0']),int(inputs['layer_1'])]),
             'learning_rate': inputs['learning_rate'],
             'epochs': parameters.params.agent['epochs'],
@@ -156,7 +157,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
             'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
         }
     elif type == "enviornment":
-        params.params.enviornment = {
+        params['params']['enviornment'] = {
             'early_penalty': inputs['early_penalty'],
             'holes_penalty': inputs['holes_penalty'],
             'height_penalty': inputs['height_penalty'],
@@ -166,7 +167,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
             'press_down_reward': inputs['press_down_reward']
         }
     elif type == "all":
-        params.params.agent = {
+        params['params']['agent'] = {
             'layers': tuple([int(inputs['layer_0']),int(inputs['layer_1'])]),
             'learning_rate': inputs['learning_rate'],
             'epochs': parameters.params.agent['epochs'],
@@ -175,7 +176,7 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
             'eval_interval': parameters.params.agent['eval_interval'],
             'collect_num_episodes': parameters.params.agent['collect_num_episodes'],
         }
-        params.params.enviornment = {
+        params['params']['enviornment'] = {
             'early_penalty': inputs['early_penalty'],
             'holes_penalty': inputs['holes_penalty'],
             'height_penalty': inputs['height_penalty'],
@@ -184,12 +185,12 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
             'block_placed_reward': inputs['block_placed_reward'],
             'press_down_reward': inputs['press_down_reward']
         }
-    
+    #logger.info(params)
     petris_environment = PetrisEnvironment(parameters=params)
     train_enivronment = TFPyEnvironment(environment=petris_environment)
     eval_environment = TFPyEnvironment(environment=petris_environment)
     
-    params = params.params.agent
+    params = params['params']['agent']
 
     global_step = tf.compat.v1.train.get_or_create_global_step()
 
@@ -206,14 +207,14 @@ def train_reinforce(main_screen: Surface, clock: Clock, speed: int, metrics: Met
     # Reset the train step
     reinforce_agent.train_step_counter.assign(0)
 
-    checkpoint = create_checkpointer(name="reinforce", 
-                                     agent=reinforce_agent, 
-                                     replay_buffer=replay_buffer, 
-                                     global_step=global_step,
-                                     max_to_keep=10)
-    policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
+    # checkpoint = create_checkpointer(name="reinforce", 
+    #                                  agent=reinforce_agent, 
+    #                                  replay_buffer=replay_buffer, 
+    #                                  global_step=global_step,
+    #                                  max_to_keep=10)
+    # policy_saver = TFPolicySaver(name="reinforce", agent=reinforce_agent)
 
-    checkpoint.initialize_or_restore()
+    # checkpoint.initialize_or_restore()
 
     # Evaluate the policy before training
     logger.info("Evaluating policy before training")

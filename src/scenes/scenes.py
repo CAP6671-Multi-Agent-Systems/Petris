@@ -335,6 +335,7 @@ class GameScene(SceneBase):
         self.super_speed_mode = False
         self.game_over = False
         self.collision = False
+        self.block_placed = None
 
     def move_down(self):
         self.keyboard_speed = -2
@@ -530,7 +531,8 @@ class GameScene(SceneBase):
                 self.tetris_map = list(reversed(temp))
                 
                 self.moving_object.append(get_random_shape(GameMetaData.map_row_no, GameMetaData.map_column_no))
-                self.moving_object.pop(0)
+                block_placed = self.moving_object.pop(0)
+                self.block_placed = self.tetris_map[block_placed.head[0]][block_placed.head[1]]
 
             if self.super_speed_mode:
                 self.super_speed_mode = False
@@ -553,12 +555,10 @@ class GameScene(SceneBase):
     def is_block_finished(self) -> bool:
         if self.moving_object[0].is_finished_or_collided(self.tetris_map):
             self.movement_speed = 0
-            is_game_over = False
             
             # Updating the tetris map by marking the occupied areas.
             for block in self.moving_object[0].blocks:
                 row_idx = block[0]
-                col_idx = block[1]
                 
                 # If the shape is at the very top then there is no room game over.
                 if row_idx == 0:
