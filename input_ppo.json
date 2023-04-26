@@ -16,7 +16,7 @@
             },
             "epsilon": 0.05,
             "learning_rate": 0.2,
-            "epochs": 50,
+            "epochs": 100,
             "log_interval": 1,
             "num_eval_episodes": 1,
             "eval_interval": 10,
@@ -67,5 +67,5 @@
             "press_down_reward":[0.0,10.0]
         }
     },
-    "to_maximize":"none"
+    "to_maximize":"all"
 }

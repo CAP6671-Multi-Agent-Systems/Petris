@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import json
 import pandas as pd
 from plotnine import *
+from mizani.formatters import scientific_format
 
 from src import paths
 from src.params.parameters import Parameters
@@ -18,14 +19,17 @@ class Metrics():
     def __init__(self, parameters: Parameters) -> None:
         self._metrics_observer = MetricsObserver()
         self._training_results_collection = []
+        self._reward_per_block_collection = []
         self._parameters = parameters
         self._iteration = 0
 
         os.makedirs(f'./results/{parameters.agent}/graphs/heatmap/{parameters.hash}/', exist_ok=True)
         os.makedirs(f'./results/{parameters.agent}/graphs/avg_return/{parameters.hash}/', exist_ok=True)
+        os.makedirs(f'./results/{parameters.agent}/graphs/block/{parameters.hash}/', exist_ok=True)
         os.makedirs(f'./results/{parameters.agent}/graphs/loss/{parameters.hash}/', exist_ok=True)
         os.makedirs(f'./results/{parameters.agent}/graphs/histogram/{parameters.hash}/', exist_ok=True)
         os.makedirs(f'./results/{parameters.agent}/graphs/lines/{parameters.hash}/', exist_ok=True)
+        os.makedirs(f'./results/{parameters.agent}/graphs/delta/{parameters.hash}/', exist_ok=True)
         
 
     def metrics_observer(self) -> MetricsObserver:
@@ -38,12 +42,15 @@ class Metrics():
         self._generate_heatmap()
         self._generate_return_plot()
         self._generate_loss_plot()
+        self._generate_reward_per_block_plot()
         self._metrics_observer.reset()
 
     def finish_training(self,results = None) -> None:
         self._save_results(results)
         self._generate_histogram()
         self._generate_lines_plot()
+        self._generate_reward_per_block_final_plot()
+        self._generate_return_delta_plot()
         logger.info('Finished training, all graphs generated.')
     
     def _generate_heatmap(self) -> None:
@@ -70,20 +77,78 @@ class Metrics():
          + geom_smooth(color='#0072B2')
          + xlab('Epoch')  # label the x-axis
          + ylab('Average Return')  # label the y-axis
-         + ggtitle(f'Avg_return per Epoch, Iteration {self._iteration}')
+         + ggtitle(f'Average Return per Epoch, Iteration {self._iteration}')
         )
         ggsave(avg_return_plot, f'./results/{self._parameters.agent}/graphs/avg_return/{self._parameters.hash}/{self._iteration}.png')
 
     def _generate_loss_plot(self) -> None:
         loss_data = self._training_results_collection[-1]
+        loss_data['loss'] = loss_data['loss'].replace(0, 1)
+        logger.info(loss_data)
         loss_plot = (ggplot(loss_data, aes(x='epoch', y='loss'))
          + geom_point(color='#E69F00')
          + geom_smooth(color='#0072B2')
          + xlab('Epoch')  # label the x-axis
          + ylab('Loss')  # label the y-axis
          + ggtitle(f'Loss per Epoch, Iteration {self._iteration}')
+         + scale_y_continuous(labels = scientific_format(digits=2))
         )
         ggsave(loss_plot, f'./results/{self._parameters.agent}/graphs/loss/{self._parameters.hash}/{self._iteration}.png')
+    
+    def _generate_reward_per_block_plot(self) -> None:
+        reward_df = self._metrics_observer.get_reward_per_block_dataframe()
+        self._reward_per_block_collection.append(reward_df)
+        
+        reward_df['avg_reward'] = pd.to_numeric(reward_df['avg_reward'], errors='coerce')
+        block_names = {4: 'S', 5: 'L', 6: 'Z', 7: 'T', 8: 'J', 10: 'O', 11: 'I'}
+        colors = {
+            'S': '#4CAF50',  # Green
+            'L': '#FF9800',  # Orange
+            'Z': '#F44336',  # Red
+            'T': '#9C27B0',  # Violet
+            'J': '#3F51B5',  # Blue
+            'O': '#FFEB3B',  # Yellow
+            'I': '#00BCD4'   # Cyan
+        }
+
+        reward_df['block'] = reward_df['block'].replace(block_names)
+
+        reward_per_block_plot = ggplot(data=reward_df, mapping=aes(x='block', y='avg_reward', fill='block'))
+        reward_per_block_plot += geom_bar(stat='identity') 
+        reward_per_block_plot += labs(title='Average Rewards by Block', x='Block', y='Average Reward')
+        reward_per_block_plot += scale_y_continuous()
+        reward_per_block_plot += scale_fill_manual(values=colors)
+        
+        ggsave(reward_per_block_plot, f'./results/{self._parameters.agent}/graphs/block/{self._parameters.hash}/{self._iteration}.png')
+
+    def _generate_reward_per_block_final_plot(self) -> None:
+        block_names = {4: 'S', 5: 'L', 6: 'Z', 7: 'T', 8: 'J', 10: 'O', 11: 'I'}
+        colors = {
+            'S': '#4CAF50',  # Green
+            'L': '#FF9800',  # Orange
+            'Z': '#F44336',  # Red
+            'T': '#9C27B0',  # Violet
+            'J': '#3F51B5',  # Blue
+            'O': '#FFEB3B',  # Yellow
+            'I': '#00BCD4'   # Cyan
+        }
+        
+        for i, df in enumerate(self._reward_per_block_collection):
+            df['iteration'] = i+1
+        
+        final_df = pd.concat(self._reward_per_block_collection, ignore_index = True)
+
+        final_df['block'] = final_df['block'].replace(block_names)
+
+        final_df = final_df.groupby(['iteration','block']).mean().reset_index()
+
+        reward_per_block_final_plot = (ggplot(data=final_df, mapping=aes(x='iteration', y='avg_reward', fill='block')) +
+            geom_bar(stat='identity', position='stack') + 
+            scale_x_continuous(breaks=range(1, len(self._reward_per_block_collection)+1)) + 
+            labs(title='Average reward per block by iteration', x='Iteration', y='Average reward', fill='Block name') +
+            scale_fill_manual(values=colors)
+        )
+        ggsave(reward_per_block_final_plot, f'./results/{self._parameters.agent}/graphs/block/{self._parameters.hash}/final_{self._iteration}.png')
 
     def _generate_return_delta_plot(self) -> None:
         # Calculate the mean return value for each DataFrame
@@ -97,8 +162,9 @@ class Metrics():
 
         # Create the reward delta plot
         return_delta_plot = (ggplot(reward_delta_df, aes(x='epoch', y='reward_delta'))
-            + geom_point(color='blue')
-            + ggtitle('Reward Delta per Iteration')
+            + geom_point(color='#E69F00') 
+            + geom_smooth(color='#0072B2')
+            + labs(title='Reward Delta per Iteration', x='Iteration', y='Reward Delta')
             )
         
         ggsave(return_delta_plot, f'./results/{self._parameters.agent}/graphs/delta/{self._parameters.hash}/{self._iteration}.png')
@@ -127,7 +193,7 @@ class Metrics():
         # Define a list of colorblind-friendly colors in hex format
 
         # Create the lines_cleared plot with multiple lines, one for each iteration
-        lines_cleared_plot = (ggplot(all_results, aes(x='epoch', y='lines_cleared', group='iteration', color='iteration'))
+        lines_cleared_plot = (ggplot(all_results, aes(x='epoch', y='lines_cleared', group='iteration'))
             + geom_line()
             + ggtitle('Lines Cleared per Epoch')
             + xlab('Epoch')
